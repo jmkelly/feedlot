@@ -1,0 +1,13 @@
+{
+  "sessionId": "/home/james/.pi/agent/sessions/--home-james-feedlot--/2026-07-13T09-51-57-877Z_019f5ae3-f9b5-7178-a10c-6b280f7a4651.jsonl",
+  "timestamp": 1783936318158,
+  "totalToolCalls": 0,
+  "totalErrors": 0,
+  "totalValidations": 0,
+  "passedValidations": 0,
+  "budgetUtilizedPercent": 100,
+  "phasesCompleted": [],
+  "skillsLoaded": [],
+  "filesModified": 0,
+  "depsInstalled": 0
+}

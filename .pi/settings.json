@@ -1,0 +1,111 @@
+{
+  "packages": [
+    "git:github.com/jmkelly/lemonharness"
+  ],
+  "lemonharness": {
+    "enabled": true,
+    "workspace": {
+      "dir": ".lemonharness",
+      "allowedPaths": [
+        "/tmp",
+        "/home/james/.cache"
+      ],
+      "blockOutsideWrites": true
+    },
+    "timeAwareness": {
+      "enabled": true,
+      "defaultBudgetMs": 600000,
+      "exploreRatio": 0.3,
+      "implementRatio": 0.6,
+      "validateRatio": 0.9,
+      "graceBand": 0.05
+    },
+    "ruleKnowledge": {
+      "enabled": true,
+      "autoDetectDomain": true
+    },
+    "executionLogging": {
+      "enabled": true,
+      "maxTrailEntries": 8,
+      "injectTrailInterval": 5
+    },
+    "structuredTools": {
+      "enabled": true,
+      "interceptBuiltins": true
+    },
+    "memory": {
+      "enabled": true,
+      "distillIntervalMs": 300000,
+      "minConfidenceForRetrieval": 0.5,
+      "decayHalfLifeDays": 30,
+      "retrievalMethod": "hybrid"
+    },
+    "selfImprovement": {
+      "enabled": true,
+      "autoReflectOnErrors": true,
+      "diminishingReturnsThreshold": 0.05,
+      "maxImprovementsPerProcess": 3,
+      "autoRecordCorrections": true
+    },
+    "qualityGate": {
+      "enabled": true,
+      "autoTriggerOnP3Entry": true,
+      "blockOnFailure": false,
+      "scriptPath": ".lemonharness/quality-gate.sh"
+    },
+    "reviewLoop": {
+      "enabled": true,
+      "autoTriggerOnP3Entry": true,
+      "defaultCycles": 2,
+      "maxCycles": 5
+    },
+    "dynamicBudget": {
+      "enabled": true,
+      "graceBandExtensionPercent": 0.2,
+      "validatePhaseMinTimeMs": 30000
+    },
+    "harnessMetrics": {
+      "enabled": true
+    },
+    "phaseCheckpoints": {
+      "enabled": true,
+      "decayFactor": 0.3
+    },
+    "safetySpecs": {
+      "enabled": true,
+      "minConfidenceForPrompt": 0.4,
+      "maxSpecsInPrompt": 3
+    },
+    "heuristics": {
+      "enabled": true,
+      "maxHeuristicsPerPrompt": 3,
+      "minConfidenceForInjection": 0.5
+    },
+    "toolPrivilege": {
+      "enabled": true,
+      "suggestAlternatives": true,
+      "escalationAlertThreshold": 0.3
+    },
+    "escalationAutoRetry": true,
+    "skills": {
+      "pseudocodeEnabled": true,
+      "verifyOnLoad": false
+    },
+    "keyMoments": {
+      "enabled": true,
+      "scanIntervalTurns": 10
+    },
+    "visualization": {
+      "enabled": true
+    },
+    "contextBudget": {
+      "enabled": true,
+      "modelContextLimit": 128000,
+      "warnThresholds": [
+        50,
+        70,
+        90
+      ]
+    }
+  }
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "h-1783937209688-apld",
+    "rule": "bash failed.",
+    "domain": "general",
+    "type": "correction",
+    "sourceEvent": "failure: bash failed",
+    "confidence": 0.6500000000000001,
+    "successCount": 4,
+    "failureCount": 0,
+    "createdAt": 1783937209688,
+    "lastUsedAt": 1783938489259
+  },
+  {
+    "id": "h-1783938203365-u1en",
+    "rule": "workspace_exec failed.",
+    "domain": "general",
+    "type": "correction",
+    "sourceEvent": "failure: workspace_exec failed",
+    "confidence": 0.5,
+    "successCount": 1,
+    "failureCount": 0,
+    "createdAt": 1783938203365,
+    "lastUsedAt": 1783938203365
+  },
+  {
+    "id": "h-1783938203366-ali3",
+    "rule": "workspace_install_dep failed.",
+    "domain": "general",
+    "type": "correction",
+    "sourceEvent": "failure: workspace_install_dep failed",
+    "confidence": 0.5,
+    "successCount": 1,
+    "failureCount": 0,
+    "createdAt": 1783938203366,
+    "lastUsedAt": 1783938203366
+  },
+  {
+    "id": "h-1783938489258-fxh7",
+    "rule": "read failed.",
+    "domain": "general",
+    "type": "correction",
+    "sourceEvent": "failure: read failed",
+    "confidence": 0.5,
+    "successCount": 1,
+    "failureCount": 0,
+    "createdAt": 1783938489258,
+    "lastUsedAt": 1783938489258
+  }
+]
