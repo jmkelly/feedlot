@@ -86,13 +86,35 @@ Not sure what to build this in? Here are three solid options, each with a differ
 
 ## Getting Started
 
-*(Coming soon — this is the idea phase.)*
+### Prerequisites
+- Go 1.25+
+- SQLite
 
-1. Clone this repo
-2. Pick your poison from above
-3. Build the feedlot
-4. Subscribe to feeds
-5. Watch them get chewed up into summaries
+### Run locally
+
+```bash
+go build -o feedlot .
+FEEDLOT_JWT_SECRET="$(openssl rand -hex 32)" \
+  FEEDLOT_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
+  ./feedlot
+```
+
+The server starts on port 8080 by default. Set `FEEDLOT_PORT` to change it.
+
+### Test account
+
+If the database already has a test user, you can sign in with:
+
+| Field | Value |
+|-------|-------|
+| Email | `test@example.com` |
+| Password | `feedlot123` |
+
+To create this account on a fresh database, just register from the login page.
+
+### Access from other devices
+
+Feedlot listens on all interfaces (`0.0.0.0`), so you can reach it from other devices on your LAN at `http://<your-ip>:8080`. Find your IP with `hostname -I`.
 
 ---
 
