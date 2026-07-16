@@ -1,3 +1,3 @@
 # Auto-Generated Spec — Review Loop
 
-Run this so I can visit on my iPad on same network
+Engage the designer to fix up this design. I want it engaging, with slick ux. I would also like posts to be marked as read once scrolled past.

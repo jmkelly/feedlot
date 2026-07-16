@@ -2,8 +2,8 @@
 id: tex-879f2bef
 type: pattern
 created_at: 2026-07-13T10:11:45.167Z
-updated_at: 2026-07-16T11:40:09.268Z
-source_count: 66
+updated_at: 2026-07-16T11:45:09.367Z
+source_count: 67
 reuse_count: 0
 success_count: 0
 failure_count: 0
