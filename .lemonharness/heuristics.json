@@ -5,11 +5,11 @@
     "domain": "general",
     "type": "correction",
     "sourceEvent": "failure: bash failed",
-    "confidence": 0.6500000000000001,
-    "successCount": 4,
+    "confidence": 0.7000000000000002,
+    "successCount": 5,
     "failureCount": 0,
     "createdAt": 1783937209688,
-    "lastUsedAt": 1783938489259
+    "lastUsedAt": 1784200213711
   },
   {
     "id": "h-1783938203365-u1en",
@@ -46,5 +46,17 @@
     "failureCount": 0,
     "createdAt": 1783938489258,
     "lastUsedAt": 1783938489258
+  },
+  {
+    "id": "h-1784200213711-ggwu",
+    "rule": "edit failed.",
+    "domain": "general",
+    "type": "correction",
+    "sourceEvent": "failure: edit failed",
+    "confidence": 0.5,
+    "successCount": 1,
+    "failureCount": 0,
+    "createdAt": 1784200213711,
+    "lastUsedAt": 1784200213711
   }
 ]

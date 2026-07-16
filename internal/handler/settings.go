@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"html/template"
 	"log"
 	"net/http"
 	"strings"
@@ -42,8 +41,7 @@ func (h *Handler) SettingsPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tmpl := template.Must(template.New("settings").Parse(settingsPageTemplate))
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := settingsTmpl.Execute(w, data); err != nil {
 		log.Printf("render settings: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
@@ -92,6 +90,11 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 			log.Println("WARNING: FEEDLOT_ENCRYPTION_KEY not set, storing API key in plain text")
 			apiKeyPtr = &apiKey
 		}
+	} else {
+		// Retain existing key if the form field was left blank
+		if existing, err := h.DB.GetUserSettings(userID); err == nil {
+			apiKeyPtr = existing.APIKeyEncrypted
+		}
 	}
 
 	var baseURLPtr *string
@@ -128,8 +131,7 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 		SaveSuccess: "Settings saved successfully",
 	}
 
-	tmpl := template.Must(template.New("settings").Parse(settingsPageTemplate))
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := settingsTmpl.Execute(w, data); err != nil {
 		log.Printf("render settings: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
@@ -141,8 +143,7 @@ func (h *Handler) renderSettingsWithError(w http.ResponseWriter, errMsg string) 
 		SaveError: errMsg,
 	}
 
-	tmpl := template.Must(template.New("settings").Parse(settingsPageTemplate))
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := settingsTmpl.Execute(w, data); err != nil {
 		log.Printf("render settings error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}

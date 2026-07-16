@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"html/template"
 	"log"
 	"net/http"
 	"strconv"
@@ -52,18 +51,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		"FeedID":   feedIDStr,
 	}
 
-	tmpl := template.Must(template.New("dashboard").Funcs(template.FuncMap{
-		"deref": func(s *string) string {
-			if s == nil {
-				return ""
-			}
-			return *s
-		},
-		"timeAgo": func(t interface{}) string {
-			return "recently"
-		},
-	}).Parse(dashboardTemplate))
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := dashboardTmpl.Execute(w, data); err != nil {
 		log.Printf("render dashboard: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
@@ -83,15 +71,7 @@ func (h *Handler) ListFeeds(w http.ResponseWriter, r *http.Request) {
 		"Feeds": feedsList,
 	}
 
-	tmpl := template.Must(template.New("feed-list").Funcs(template.FuncMap{
-		"deref": func(s *string) string {
-			if s == nil {
-				return ""
-			}
-			return *s
-		},
-	}).Parse(feedListTemplate))
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := feedListTmpl.Execute(w, data); err != nil {
 		log.Printf("render feed list: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
@@ -111,11 +91,10 @@ func (h *Handler) AddFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if feed already exists for any user
-	existing, _ := h.DB.GetFeedByURL(feedURL)
-	if existing != nil {
-		// Feed already subscribed — check if by this user
-		if existing.UserID == userID {
+	// Check if feed already exists for this user
+	userFeeds, _ := h.DB.GetUserFeeds(userID)
+	for _, f := range userFeeds {
+		if f.FeedURL == feedURL {
 			http.Error(w, "Feed already subscribed", http.StatusConflict)
 			return
 		}
@@ -215,7 +194,7 @@ func (h *Handler) RefreshFeed(w http.ResponseWriter, r *http.Request) {
 
 		// Run AI summarization on new articles with content
 		if stored.Content != nil && *stored.Content != "" {
-			summary, err := summarizer.Summarize(buildSummaryRequest(settings, *stored.Content))
+			summary, err := summarizer.Summarize(h.buildSummaryRequest(settings, *stored.Content))
 			if err != nil {
 				log.Printf("summarize article %d: %v", stored.ID, err)
 				continue
@@ -262,24 +241,13 @@ func (h *Handler) ListArticlesByFeed(w http.ResponseWriter, r *http.Request) {
 		"Articles": articles,
 	}
 
-	tmpl := template.Must(template.New("article-list").Funcs(template.FuncMap{
-		"deref": func(s *string) string {
-			if s == nil {
-				return ""
-			}
-			return *s
-		},
-		"timeAgo": func(t interface{}) string {
-			return "recently"
-		},
-	}).Parse(articleListTemplate))
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := articleListTmpl.Execute(w, data); err != nil {
 		log.Printf("render article list: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
-func buildSummaryRequest(settings *model.UserSettings, content string) ai.SummaryRequest {
+func (h *Handler) buildSummaryRequest(settings *model.UserSettings, content string) ai.SummaryRequest {
 	req := ai.SummaryRequest{
 		ArticleText: content,
 		Length:      "short",
@@ -295,7 +263,18 @@ func buildSummaryRequest(settings *model.UserSettings, content string) ai.Summar
 			req.BaseURL = *settings.BaseURL
 		}
 		if settings.APIKeyEncrypted != nil {
-			req.APIKey = *settings.APIKeyEncrypted
+			// Decrypt if encryption key is configured
+			if h.EncryptionKey != "" {
+				decrypted, err := Decrypt(*settings.APIKeyEncrypted, []byte(h.EncryptionKey))
+				if err != nil {
+					log.Printf("decrypt API key: %v", err)
+					req.APIKey = *settings.APIKeyEncrypted // fallback to stored value
+				} else {
+					req.APIKey = string(decrypted)
+				}
+			} else {
+				req.APIKey = *settings.APIKeyEncrypted
+			}
 		}
 	}
 

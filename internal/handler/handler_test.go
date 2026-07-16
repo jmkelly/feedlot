@@ -2,12 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"fmt"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
@@ -94,7 +93,7 @@ func setupTestHandler(t *testing.T) (*Handler, *db.DB, *auth.Auth) {
 	}
 
 	a := auth.New("test-jwt-secret-for-testing-purposes")
-	h := New(database, a)
+	h := New(database, a, "")
 	return h, database, a
 }
 
@@ -975,7 +974,8 @@ func TestNew(t *testing.T) {
 }
 
 func TestBuildSummaryRequestDefaults(t *testing.T) {
-	req := buildSummaryRequest(nil, "test content")
+	h := &Handler{EncryptionKey: ""}
+	req := h.buildSummaryRequest(nil, "test content")
 	if req.Provider != "openai" {
 		t.Errorf("Default provider = %q, want %q", req.Provider, "openai")
 	}
@@ -991,6 +991,7 @@ func TestBuildSummaryRequestDefaults(t *testing.T) {
 }
 
 func TestBuildSummaryRequestFromSettings(t *testing.T) {
+	h := &Handler{EncryptionKey: ""}
 	baseURL := "https://custom.api.com"
 	apiKey := "sk-encrypted"
 	settings := &model.UserSettings{
@@ -1002,7 +1003,7 @@ func TestBuildSummaryRequestFromSettings(t *testing.T) {
 		SummaryLanguage: "spanish",
 	}
 
-	req := buildSummaryRequest(settings, "article text")
+	req := h.buildSummaryRequest(settings, "article text")
 	if req.Provider != "anthropic" {
 		t.Errorf("Provider = %q", req.Provider)
 	}
@@ -1232,26 +1233,5 @@ func TestShowArticleWithoutContent(t *testing.T) {
 
 func itoa(i int64) string {
 	return fmt.Sprintf("%d", i)
-}
-
-// Simple int64 to string conversion for test helper
-func formatInt64(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	digits := []byte{}
-	neg := false
-	if n < 0 {
-		neg = true
-		n = -n
-	}
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	if neg {
-		return "-" + string(digits)
-	}
-	return string(digits)
 }
 

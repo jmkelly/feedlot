@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"html/template"
 	"log"
 	"net/http"
 	"strconv"
@@ -32,15 +31,7 @@ func (h *Handler) ListArticles(w http.ResponseWriter, r *http.Request) {
 		"Articles": articles,
 	}
 
-	tmpl := template.Must(template.New("articles").Funcs(template.FuncMap{
-		"deref": func(s *string) string {
-			if s == nil {
-				return ""
-			}
-			return *s
-		},
-	}).Parse(articleListTemplate))
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := articleListTmpl.Execute(w, data); err != nil {
 		log.Printf("render articles: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
@@ -66,15 +57,7 @@ func (h *Handler) ShowArticle(w http.ResponseWriter, r *http.Request) {
 		"Article": article,
 	}
 
-	tmpl := template.Must(template.New("article").Funcs(template.FuncMap{
-		"deref": func(s *string) string {
-			if s == nil {
-				return ""
-			}
-			return *s
-		},
-	}).Parse(articleDetailTemplate))
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := articleDetailTmpl.Execute(w, data); err != nil {
 		log.Printf("render article: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
@@ -101,15 +84,7 @@ func (h *Handler) ToggleRead(w http.ResponseWriter, r *http.Request) {
 		"Article": *article,
 	}
 
-	tmpl := template.Must(template.New("article-card").Funcs(template.FuncMap{
-		"deref": func(s *string) string {
-			if s == nil {
-				return ""
-			}
-			return *s
-		},
-	}).Parse(articleCardTemplate))
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := articleCardTmpl.Execute(w, data); err != nil {
 		log.Printf("render article card: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}

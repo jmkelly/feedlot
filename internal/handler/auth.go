@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"html/template"
 	"log"
 	"net/http"
 	"strings"
@@ -65,6 +64,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  expiresAt,
 		HttpOnly: true,
+		Secure:   r.TLS != nil,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -148,6 +148,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  expiresAt,
 		HttpOnly: true,
+		Secure:   r.TLS != nil,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -168,6 +169,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   r.TLS != nil,
 	})
 
 	// HTMX redirect
@@ -182,8 +184,7 @@ func (h *Handler) renderAuth(w http.ResponseWriter, r *http.Request, page, email
 		"Error": errorMsg,
 	}
 
-	tmpl := template.Must(template.New("auth").Parse(authPageTemplate))
-	if err := tmpl.Execute(w, data); err != nil {
+	if err := authTmpl.Execute(w, data); err != nil {
 		log.Printf("render auth template: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
