@@ -21,7 +21,6 @@ func main() {
 	dbPath := getEnv("FEEDLOT_DB_PATH", "./feedlot.db")
 	jwtSecret := getEnv("FEEDLOT_JWT_SECRET", "")
 	encryptionKey := getEnv("FEEDLOT_ENCRYPTION_KEY", "")
-	_ = encryptionKey // reserved for future API key encryption
 
 	if jwtSecret == "" {
 		log.Fatal("FEEDLOT_JWT_SECRET environment variable is required")
@@ -47,7 +46,7 @@ func main() {
 
 	// ─── Dependencies ──────────────────────────────────────────────────────
 	authService := auth.New(jwtSecret)
-	h := handler.New(database, authService)
+	h := handler.New(database, authService, encryptionKey)
 
 	// ─── Router ────────────────────────────────────────────────────────────
 	r := chi.NewRouter()

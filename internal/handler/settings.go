@@ -79,7 +79,19 @@ func (h *Handler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 
 	var apiKeyPtr *string
 	if apiKey != "" {
-		apiKeyPtr = &apiKey
+		if h.EncryptionKey != "" {
+			encrypted, err := Encrypt([]byte(apiKey), []byte(h.EncryptionKey))
+			if err != nil {
+				log.Printf("encrypt API key: %v", err)
+				h.renderSettingsWithError(w, "Failed to encrypt API key")
+				return
+			}
+			apiKeyPtr = &encrypted
+		} else {
+			// No encryption key configured — store as-is (not recommended)
+			log.Println("WARNING: FEEDLOT_ENCRYPTION_KEY not set, storing API key in plain text")
+			apiKeyPtr = &apiKey
+		}
 	}
 
 	var baseURLPtr *string

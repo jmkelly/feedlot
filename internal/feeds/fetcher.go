@@ -3,7 +3,6 @@ package feeds
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/mmcdole/gofeed"
 
@@ -23,8 +22,6 @@ func FetchFeed(feedURL string, userID int64) (*FetchResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse feed %s: %w", feedURL, err)
 	}
-
-	now := time.Now()
 
 	feed := &model.Feed{
 		UserID:  userID,
@@ -106,9 +103,6 @@ func FetchFeed(feedURL string, userID int64) (*FetchResult, error) {
 		Feed:     feed,
 		Articles: articles,
 	}
-
-	// Set last fetched time outside the result feed struct — caller manages it
-	_ = now
 
 	return result, nil
 }

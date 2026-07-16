@@ -13,14 +13,16 @@ type contextKey string
 const userIDKey contextKey = "user_id"
 
 type Handler struct {
-	DB   *db.DB
-	Auth *auth.Auth
+	DB            *db.DB
+	Auth          *auth.Auth
+	EncryptionKey string
 }
 
-func New(database *db.DB, a *auth.Auth) *Handler {
+func New(database *db.DB, a *auth.Auth, encryptionKey string) *Handler {
 	return &Handler{
-		DB:   database,
-		Auth: a,
+		DB:            database,
+		Auth:          a,
+		EncryptionKey: encryptionKey,
 	}
 }
 

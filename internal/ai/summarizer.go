@@ -141,9 +141,9 @@ func (s *Summarizer) callOpenAICompatible(req SummaryRequest, systemPrompt, user
 			lastErr = fmt.Errorf("http request: %w", err)
 			continue
 		}
-		defer resp.Body.Close()
 
 		respBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			lastErr = fmt.Errorf("read response: %w", err)
 			continue
