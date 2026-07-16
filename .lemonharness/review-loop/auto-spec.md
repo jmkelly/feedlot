@@ -1,3 +1,3 @@
 # Auto-Generated Spec — Review Loop
 
-implement functionality to import an opml file to add all my feeds
+Run this so I can visit on my iPad on same network

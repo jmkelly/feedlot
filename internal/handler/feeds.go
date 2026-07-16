@@ -509,7 +509,7 @@ const dashboardTemplate = `<!DOCTYPE html>
               <p class="text-xs mt-1">Add one below</p>
             </div>
             {{end}}
-            <div class="p-4">
+            <div class="p-4 border-b border-stone-100">
               <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
                 <input type="url" name="url" placeholder="RSS/Atom URL" required
                   class="flex-1 px-3 py-1.5 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
@@ -517,6 +517,19 @@ const dashboardTemplate = `<!DOCTYPE html>
                   class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
                   Add
                 </button>
+              </form>
+            </div>
+            <div class="p-4">
+              <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data" class="flex flex-col gap-2">
+                <label class="block text-xs text-stone-500 font-medium">Import OPML</label>
+                <div class="flex gap-2">
+                  <input type="file" name="opml_file" accept=".opml,.xml" required
+                    class="flex-1 text-sm text-stone-600 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100">
+                  <button type="submit"
+                    class="px-3 py-1.5 bg-stone-500 hover:bg-stone-600 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
+                    Import
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -588,7 +601,7 @@ const feedListTemplate = `<div class="bg-white rounded-xl shadow-sm border borde
     <p class="text-xs mt-1">Add one below</p>
   </div>
   {{end}}
-  <div class="p-4">
+  <div class="p-4 border-b border-stone-100">
     <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
       <input type="url" name="url" placeholder="RSS/Atom URL" required
         class="flex-1 px-3 py-1.5 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
@@ -596,6 +609,19 @@ const feedListTemplate = `<div class="bg-white rounded-xl shadow-sm border borde
         class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
         Add
       </button>
+    </form>
+  </div>
+  <div class="p-4">
+    <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data" class="flex flex-col gap-2">
+      <label class="block text-xs text-stone-500 font-medium">Import OPML</label>
+      <div class="flex gap-2">
+        <input type="file" name="opml_file" accept=".opml,.xml" required
+          class="flex-1 text-sm text-stone-600 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100">
+        <button type="submit"
+          class="px-3 py-1.5 bg-stone-500 hover:bg-stone-600 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
+          Import
+        </button>
+      </div>
     </form>
   </div>
 </div>`

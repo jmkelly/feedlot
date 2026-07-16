@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "lastUpdated": 1784201235211,
-  "events": 27,
-  "textEntries": 7,
+  "lastUpdated": 1784201479406,
+  "events": 31,
+  "textEntries": 9,
   "codeEntries": 0,
   "tags": {
     "lemonharness": 1,
@@ -15,8 +15,8 @@
     "phase1": 1,
     "phase2": 1,
     "complete": 1,
-    "bash": 13,
-    "error": 23,
+    "bash": 17,
+    "error": 27,
     "workspace_exec": 5,
     "workspace_install_dep": 1,
     "read": 2,

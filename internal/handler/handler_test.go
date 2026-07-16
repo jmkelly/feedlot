@@ -133,6 +133,7 @@ func setupRouter(h *Handler) *chi.Mux {
 		r.Get("/", h.Dashboard)
 		r.Get("/feeds", h.ListFeeds)
 		r.Post("/feeds", h.AddFeed)
+		r.Post("/feeds/import", h.ImportOPML)
 		r.Delete("/feeds/{id}", h.RemoveFeed)
 		r.Post("/feeds/{id}/refresh", h.RefreshFeed)
 		r.Get("/articles", h.ListArticles)
