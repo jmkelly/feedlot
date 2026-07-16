@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"encoding/xml"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -75,6 +78,156 @@ func (h *Handler) ListFeeds(w http.ResponseWriter, r *http.Request) {
 		log.Printf("render feed list: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+// ─── OPML Import ─────────────────────────────────────────────────────────
+
+// opmlDocument represents the root of an OPML 1.0/2.0 file.
+type opmlDocument struct {
+	XMLName xml.Name   `xml:"opml"`
+	Version string     `xml:"version,attr"`
+	Head    opmlHead   `xml:"head"`
+	Body    opmlBody   `xml:"body"`
+}
+
+type opmlHead struct {
+	Title string `xml:"title"`
+}
+
+type opmlBody struct {
+	Outlines []opmlOutline `xml:"outline"`
+}
+
+type opmlOutline struct {
+	Text     string        `xml:"text,attr"`
+	Title    string        `xml:"title,attr"`
+	Type     string        `xml:"type,attr"`
+	XMLURL   string        `xml:"xmlUrl,attr"`
+	HTMLURL  string        `xml:"htmlUrl,attr"`
+	Outlines []opmlOutline `xml:"outline"`
+}
+
+type opmlFeedEntry struct {
+	Title   string
+	FeedURL string
+	SiteURL string
+}
+
+// parseOPML reads an OPML file and extracts all feed entries from nested outlines.
+func parseOPML(r io.Reader) ([]opmlFeedEntry, error) {
+	var doc opmlDocument
+	if err := xml.NewDecoder(r).Decode(&doc); err != nil {
+		return nil, fmt.Errorf("decode opml: %w", err)
+	}
+
+	var entries []opmlFeedEntry
+	collectFeedEntries(doc.Body.Outlines, &entries)
+	return entries, nil
+}
+
+// collectFeedEntries recursively flattens nested <outline> elements.
+func collectFeedEntries(outlines []opmlOutline, entries *[]opmlFeedEntry) {
+	for _, ol := range outlines {
+		if ol.XMLURL != "" {
+			title := ol.Title
+			if title == "" {
+				title = ol.Text
+			}
+			*entries = append(*entries, opmlFeedEntry{
+				Title:   title,
+				FeedURL: ol.XMLURL,
+				SiteURL: ol.HTMLURL,
+			})
+		}
+		if len(ol.Outlines) > 0 {
+			collectFeedEntries(ol.Outlines, entries)
+		}
+	}
+}
+
+func (h *Handler) ImportOPML(w http.ResponseWriter, r *http.Request) {
+	userID := GetUserID(r)
+
+	// Max 10MB upload
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	file, _, err := r.FormFile("opml_file")
+	if err != nil {
+		http.Error(w, "OPML file is required", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	entries, err := parseOPML(file)
+	if err != nil {
+		log.Printf("parse opml: %v", err)
+		http.Error(w, "Failed to parse OPML file", http.StatusBadRequest)
+		return
+	}
+
+	if len(entries) == 0 {
+		http.Error(w, "No feeds found in OPML file", http.StatusBadRequest)
+		return
+	}
+
+	// Get existing user feeds to skip duplicates
+	existingFeeds, _ := h.DB.GetUserFeeds(userID)
+	existingURLs := make(map[string]bool, len(existingFeeds))
+	for _, f := range existingFeeds {
+		existingURLs[f.FeedURL] = true
+	}
+
+	imported := 0
+	skipped := 0
+	var errs []string
+
+	for _, entry := range entries {
+		if existingURLs[entry.FeedURL] {
+			skipped++
+			continue
+		}
+
+		result, err := feeds.FetchFeed(entry.FeedURL, userID)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", entry.FeedURL, err))
+			continue
+		}
+
+		// Use OPML title if available (often more descriptive), fall back to fetched title
+		if entry.Title != "" {
+			result.Feed.Title = entry.Title
+		}
+		if entry.SiteURL != "" && result.Feed.SiteURL == nil {
+			result.Feed.SiteURL = &entry.SiteURL
+		}
+
+		feed, err := h.DB.CreateFeed(result.Feed)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", entry.FeedURL, err))
+			continue
+		}
+
+		// Store articles from the fetched feed
+		for _, article := range result.Articles {
+			article.FeedID = feed.ID
+			if _, err := h.DB.CreateArticle(article); err != nil {
+				continue // skip duplicates
+			}
+		}
+
+		imported++
+	}
+
+	log.Printf("OPML import for user %d: %d imported, %d skipped, %d errors", userID, imported, skipped, len(errs))
+	for _, e := range errs {
+		log.Printf("  OPML import error: %s", e)
+	}
+
+	// Re-render the feed list sidebar
+	h.ListFeeds(w, r)
 }
 
 func (h *Handler) AddFeed(w http.ResponseWriter, r *http.Request) {

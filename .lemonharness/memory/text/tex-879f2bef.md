@@ -2,14 +2,16 @@
 id: tex-879f2bef
 type: pattern
 created_at: 2026-07-13T10:11:45.167Z
-updated_at: 2026-07-16T11:23:46.800Z
-source_count: 62
+updated_at: 2026-07-16T11:26:06.244Z
+source_count: 64
 reuse_count: 0
 success_count: 0
 failure_count: 0
 confidence: 0.000
 tags: [bash, error, avoid, lesson]
 ---
+# bash failed
+# bash failed
 # bash failed
 # bash failed
 # bash failed

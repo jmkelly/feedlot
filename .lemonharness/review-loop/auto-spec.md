@@ -1,3 +1,3 @@
 # Auto-Generated Spec — Review Loop
 
-Build and test
+implement functionality to import an opml file to add all my feeds
