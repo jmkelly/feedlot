@@ -52,7 +52,7 @@ func (h *Handler) AdminLogs(w http.ResponseWriter, r *http.Request) {
 			ID:        e.ID,
 			Level:     e.Level,
 			Message:   e.Message,
-			CreatedAt: e.CreatedAt.Format("Jan 02 15:04:05"),
+			CreatedAt: e.CreatedAt.UTC().Format("Jan 02 15:04:05 UTC"),
 		})
 	}
 

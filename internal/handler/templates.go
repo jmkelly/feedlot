@@ -69,6 +69,7 @@ var (
 			return *s
 		},
 		"timeAgo": timeAgo,
+		"add": func(a, b int) int { return a + b },
 	}).Parse(dashboardTemplate))
 
 	feedListTmpl = template.Must(template.New("feed-list").Funcs(template.FuncMap{
@@ -97,7 +98,19 @@ var (
 			return *s
 		},
 		"timeAgo": timeAgo,
+		"add": func(a, b int) int { return a + b },
 	}).Parse(articleListTemplate))
+
+	loadMoreTmpl = template.Must(template.New("load-more").Funcs(template.FuncMap{
+		"deref": func(s *string) string {
+			if s == nil {
+				return ""
+			}
+			return *s
+		},
+		"timeAgo": timeAgo,
+		"add": func(a, b int) int { return a + b },
+	}).Parse(loadMoreTemplate))
 
 	articleCardTmpl = template.Must(template.New("article-card").Funcs(template.FuncMap{
 		"deref": func(s *string) string {

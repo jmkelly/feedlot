@@ -692,7 +692,7 @@ func TestGetArticlesByUserID(t *testing.T) {
 	db.CreateArticle(&model.Article{FeedID: feed1.ID, GUID: "g2", Title: "A2"})
 	db.CreateArticle(&model.Article{FeedID: feed2.ID, GUID: "g3", Title: "A3"})
 
-	articles, err := db.GetArticlesByUserID(user.ID, nil)
+	articles, err := db.GetArticlesByUserID(user.ID, nil, false, 0, 0)
 	if err != nil {
 		t.Fatalf("GetArticlesByUserID failed: %v", err)
 	}
@@ -712,7 +712,7 @@ func TestGetArticlesByUserIDFilteredByFeed(t *testing.T) {
 	db.CreateArticle(&model.Article{FeedID: feed1.ID, GUID: "g1", Title: "A1"})
 	db.CreateArticle(&model.Article{FeedID: feed2.ID, GUID: "g2", Title: "A2"})
 
-	articles, err := db.GetArticlesByUserID(user.ID, &feed1.ID)
+	articles, err := db.GetArticlesByUserID(user.ID, &feed1.ID, false, 0, 0)
 	if err != nil {
 		t.Fatalf("GetArticlesByUserID failed: %v", err)
 	}
@@ -972,7 +972,7 @@ func TestArticleContentNotExposedInList(t *testing.T) {
 		Content: &content,
 	})
 
-	articles, _ := db.GetArticlesByUserID(user.ID, nil)
+	articles, _ := db.GetArticlesByUserID(user.ID, nil, false, 0, 0)
 	if len(articles) > 0 && articles[0].Content != nil {
 		t.Error("Article content should NOT be populated in list queries (NULL AS content)")
 	}

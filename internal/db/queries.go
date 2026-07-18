@@ -183,25 +183,37 @@ func (db *DB) GetArticlesByFeedID(feedID int64) ([]model.Article, error) {
 	return articles, nil
 }
 
-func (db *DB) GetArticlesByUserID(userID int64, feedID *int64) ([]model.Article, error) {
+func (db *DB) GetArticlesByUserID(userID int64, feedID *int64, unreadOnly bool, limit, offset int) ([]model.Article, error) {
 	var articles []model.Article
 	var err error
 
+	// Build the query dynamically
+	baseQuery := `SELECT a.id, a.feed_id, f.title AS feed_title, a.guid, a.title, a.url, a.author,
+		NULL AS content, a.summary, a.published_at, a.is_read, a.created_at
+		FROM articles a
+		JOIN feeds f ON f.id = a.feed_id
+		WHERE f.user_id = $1`
+	args := []interface{}{userID}
+	argIdx := 2
+
 	if feedID != nil {
-		err = db.Select(&articles, `SELECT a.id, a.feed_id, a.guid, a.title, a.url, a.author,
-			NULL AS content, a.summary, a.published_at, a.is_read, a.created_at
-			FROM articles a
-			JOIN feeds f ON f.id = a.feed_id
-			WHERE f.user_id = $1 AND a.feed_id = $2
-			ORDER BY COALESCE(a.published_at, a.created_at) DESC`, userID, *feedID)
-	} else {
-		err = db.Select(&articles, `SELECT a.id, a.feed_id, a.guid, a.title, a.url, a.author,
-			NULL AS content, a.summary, a.published_at, a.is_read, a.created_at
-			FROM articles a
-			JOIN feeds f ON f.id = a.feed_id
-			WHERE f.user_id = $1
-			ORDER BY COALESCE(a.published_at, a.created_at) DESC`, userID)
+		baseQuery += fmt.Sprintf(" AND a.feed_id = $%d", argIdx)
+		args = append(args, *feedID)
+		argIdx++
 	}
+
+	if unreadOnly {
+		baseQuery += " AND NOT a.is_read"
+	}
+
+	baseQuery += " ORDER BY COALESCE(a.published_at, a.created_at) DESC"
+
+	if limit > 0 {
+		baseQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
+		args = append(args, limit, offset)
+	}
+
+	err = db.Select(&articles, baseQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("get articles by user id: %w", err)
 	}

@@ -25,7 +25,9 @@ func (h *Handler) ListArticles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	articles, err := h.DB.GetArticlesByUserID(userID, feedID)
+	unreadOnly := r.URL.Query().Get("unread") == "1"
+
+	articles, err := h.DB.GetArticlesByUserID(userID, feedID, unreadOnly, 0, 0)
 	if err != nil {
 		log.Printf("list articles: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -33,7 +35,11 @@ func (h *Handler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"Articles": articles,
+		"Articles":   articles,
+		"FeedID":     feedIDStr,
+		"UnreadOnly": unreadOnly,
+		"Limit":      0,
+		"Offset":     0,
 	}
 
 	if err := articleListTmpl.Execute(w, data); err != nil {
@@ -189,7 +195,7 @@ func (h *Handler) SummarizeArticle(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.Summarizer.Summarize(req)
 	if err != nil {
 		log.Printf("summarize article %d: %v", articleID, err)
-		http.Error(w, "Summarization failed: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Summarization failed", http.StatusInternalServerError)
 		return
 	}
 

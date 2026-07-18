@@ -40,6 +40,7 @@ type LogEntry struct {
 type Article struct {
 	ID          int64      `db:"id" json:"id"`
 	FeedID      int64      `db:"feed_id" json:"feed_id"`
+	FeedTitle   string     `db:"feed_title" json:"feed_title,omitempty"`
 	GUID        string     `db:"guid" json:"guid"`
 	Title       string     `db:"title" json:"title"`
 	URL         *string    `db:"url" json:"url,omitempty"`

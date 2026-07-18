@@ -28,6 +28,17 @@ func noRedirectClient() *http.Client {
 	}
 }
 
+// hxPost sends an HTMX-style POST request (includes HX-Request header).
+func hxPost(url, contentType, body string) (*http.Response, error) {
+	req, err := http.NewRequest("POST", url, strings.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("HX-Request", "true")
+	return noRedirectClient().Do(req)
+}
+
 // setupTestHandler creates a complete handler with in-memory database for testing.
 func setupTestHandler(t *testing.T) (*Handler, *db.DB, *auth.Auth) {
 	t.Helper()
@@ -191,21 +202,20 @@ func TestRegisterSuccess(t *testing.T) {
 	server := httptest.NewServer(r)
 	defer server.Close()
 
-	body := strings.NewReader("email=new@example.com&password=password123&confirm_password=password123")
-	resp, err := noRedirectClient().Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	resp, err := hxPost(server.URL+"/register", "application/x-www-form-urlencoded", "email=new@example.com&password=password123&confirm_password=password123")
 	if err != nil {
 		t.Fatalf("Register request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Should redirect to dashboard
-	if resp.StatusCode != http.StatusSeeOther {
-		t.Errorf("Register status = %d, want 303", resp.StatusCode)
+	// Should return 200 with HX-Redirect header (HTMX-compatible redirect)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Register status = %d, want 200", resp.StatusCode)
 	}
 
-	loc := resp.Header.Get("Location")
+	loc := resp.Header.Get("HX-Redirect")
 	if loc != "/" {
-		t.Errorf("Redirect Location = %q, want /", loc)
+		t.Errorf("HX-Redirect = %q, want /", loc)
 	}
 
 	// Should set a cookie
@@ -307,15 +317,14 @@ func TestLoginSuccess(t *testing.T) {
 	server := httptest.NewServer(r)
 	defer server.Close()
 
-	body := strings.NewReader("email=login@example.com&password=correct-password")
-	resp, err := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	resp, err := hxPost(server.URL+"/login", "application/x-www-form-urlencoded", "email=login@example.com&password=correct-password")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusSeeOther {
-		t.Errorf("Login status = %d, want 303", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Login status = %d, want 200", resp.StatusCode)
 	}
 
 	cookies := resp.Cookies()

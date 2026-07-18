@@ -32,7 +32,24 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	articles, err := h.DB.GetArticlesByUserID(userID, selectedFeedID)
+	// Unread-only filter
+	unreadOnly := r.URL.Query().Get("unread") == "1"
+
+	// Pagination
+	limit := 50
+	offset := 0
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 200 {
+			limit = l
+		}
+	}
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	articles, err := h.DB.GetArticlesByUserID(userID, selectedFeedID, unreadOnly, limit, offset)
 	if err != nil {
 		log.Printf("get articles: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -46,11 +63,25 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		data := map[string]any{
-			"Articles": articles,
+			"Articles":   articles,
+			"UnreadOnly": unreadOnly,
+			"FeedID":     feedIDStr,
+			"Limit":      limit,
+			"Offset":     offset,
 		}
-		if err := articleListTmpl.Execute(w, data); err != nil {
-			log.Printf("render article list: %v", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		if offset > 0 {
+			// Load-more pagination: return only the new cards and an updated
+			// load-more button, without the stream bar (which stays in the DOM).
+			if err := loadMoreTmpl.Execute(w, data); err != nil {
+				log.Printf("render load-more: %v", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+		} else {
+			// Full article list replacement (feed click, filter toggle).
+			if err := articleListTmpl.Execute(w, data); err != nil {
+				log.Printf("render article list: %v", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
 		}
 		return
 	}
@@ -80,6 +111,9 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		"Feeds":              feeds,
 		"Articles":           articles,
 		"FeedID":             feedIDStr,
+		"UnreadOnly":         unreadOnly,
+		"Limit":              limit,
+		"Offset":             offset,
 		"SettingsProvider":   settingsProvider,
 		"SettingsModel":      settingsModel,
 		"SettingsConfigured": settingsConfigured,
@@ -286,7 +320,7 @@ func (h *Handler) AddFeed(w http.ResponseWriter, r *http.Request) {
 	result, err := feeds.FetchFeed(feedURL, userID)
 	if err != nil {
 		log.Printf("fetch feed %s: %v", feedURL, err)
-		http.Error(w, "Failed to fetch feed: "+err.Error(), http.StatusBadRequest)
+		http.Error(w, "Failed to fetch feed", http.StatusBadRequest)
 		return
 	}
 
@@ -389,18 +423,20 @@ func (h *Handler) ListArticlesByFeed(w http.ResponseWriter, r *http.Request) {
 	userID := GetUserID(r)
 	feedIDStr := r.URL.Query().Get("feed_id")
 
+	unreadOnly := r.URL.Query().Get("unread") == "1"
+
 	var articles []model.Article
 	var err error
 
 	if feedIDStr != "" {
 		fid, convErr := strconv.ParseInt(feedIDStr, 10, 64)
 		if convErr == nil {
-			articles, err = h.DB.GetArticlesByUserID(userID, &fid)
+			articles, err = h.DB.GetArticlesByUserID(userID, &fid, unreadOnly, 0, 0)
 		} else {
-			articles, err = h.DB.GetArticlesByUserID(userID, nil)
+			articles, err = h.DB.GetArticlesByUserID(userID, nil, unreadOnly, 0, 0)
 		}
 	} else {
-		articles, err = h.DB.GetArticlesByUserID(userID, nil)
+		articles, err = h.DB.GetArticlesByUserID(userID, nil, unreadOnly, 0, 0)
 	}
 
 	if err != nil {
@@ -410,7 +446,11 @@ func (h *Handler) ListArticlesByFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"Articles": articles,
+		"Articles":   articles,
+		"FeedID":     feedIDStr,
+		"UnreadOnly": unreadOnly,
+		"Limit":      0,
+		"Offset":     0,
 	}
 
 	if err := articleListTmpl.Execute(w, data); err != nil {
@@ -490,6 +530,11 @@ const dashboardTemplate = `
 <body>
   <nav class="topbar">
     <div class="topbar__brand">
+      <button class="hamburger" id="menu-toggle" aria-label="Toggle feed sidebar" title="Toggle feed sidebar">
+        <span class="hamburger__line"></span>
+        <span class="hamburger__line"></span>
+        <span class="hamburger__line"></span>
+      </button>
       <span class="topbar__mark">🐄</span>
       <span class="topbar__name">Feedlot</span>
       <span class="topbar__tag">Field Station</span>
@@ -507,6 +552,7 @@ const dashboardTemplate = `
       </span>
       <a href="/settings" class="btn btn--ghost">Settings</a>
       <a href="/admin/logs" class="btn btn--ghost">Admin</a>
+      <button class="btn btn--ghost" id="shortcuts-help" title="Keyboard shortcuts (?) " aria-label="Keyboard shortcuts">?</button>
       <form hx-post="/logout" hx-target="body" hx-swap="outerHTML" class="flex">
         <button type="submit" class="btn btn--ghost">Log out</button>
       </form>
@@ -514,11 +560,26 @@ const dashboardTemplate = `
     <div class="progress"><div class="progress__bar" id="progress-bar"></div></div>
   </nav>
 
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
   <main class="layout">
     <aside id="feed-sidebar" class="sidebar">
       <div class="panel">
         <div id="feed-sidebar-inner">
           <div class="panel__head"><span class="panel__title"><b>≡</b> Pen</span></div>
+          <div class="add-feed add-feed--top">
+            <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
+              <input type="url" name="url" placeholder="RSS / Atom URL" required class="input input--sm" id="add-feed-input">
+              <button type="submit" class="btn btn--primary btn--mini">Add</button>
+            </form>
+          </div>
+          <div class="feed{{if not $.FeedID}} feed--active{{end}}">
+            <a href="/" class="feed__row feed__row--all"
+               hx-get="/" hx-target="#article-list" hx-push-url="true"
+               hx-indicator="#loading">
+              <span class="feed__title">All articles</span>
+            </a>
+          </div>
           {{range .Feeds}}
           <div class="feed{{if eq $.FeedID (printf "%d" .ID)}} feed--active{{end}}" data-feed-id="{{.ID}}">
             <a href="/?feed_id={{.ID}}" class="feed__row"
@@ -559,6 +620,18 @@ const dashboardTemplate = `
     </aside>
 
     <section id="article-list" class="stream">
+      <div class="stream__bar">
+        {{if .FeedID}}
+        <h2 class="stream__heading">
+          Filtering by feed
+          <a href="/{{if .UnreadOnly}}?unread=1{{end}}" class="btn btn--ghost btn--mini" style="font-size:.7rem">✕ Clear</a>
+        </h2>
+        {{end}}
+        <div class="stream__toggles">
+          <a href="/?feed_id={{.FeedID}}" class="chip{{if not .UnreadOnly}} chip--on{{end}}" id="filter-all">All</a>
+          <a href="/?feed_id={{.FeedID}}&unread=1" class="chip{{if .UnreadOnly}} chip--on{{end}}" id="filter-unread">Unread</a>
+        </div>
+      </div>
       <div id="loading" class="htmx-indicator loading">Checking pens...</div>
       {{range .Articles}}
       <div class="card{{if not .IsRead}} is-unread{{end}}{{if .IsRead}} is-read{{end}}" data-article-id="{{.ID}}" data-feed-id="{{.FeedID}}">
@@ -569,7 +642,7 @@ const dashboardTemplate = `
           <p class="card__meta">
             {{if .Author}}<span>{{deref .Author}}</span>{{end}}
             {{if .PublishedAt}}<span>{{timeAgo .PublishedAt}}</span>{{end}}
-            <span class="card__pen">#{{.FeedID}}</span>
+            <a href="/?feed_id={{.FeedID}}" class="card__pen" hx-get="/?feed_id={{.FeedID}}" hx-target="#article-list" hx-push-url="true">{{if .FeedTitle}}{{.FeedTitle}}{{else}}#{{.FeedID}}{{end}}</a>
           </p>
           {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
         </div>
@@ -592,8 +665,34 @@ const dashboardTemplate = `
         <p class="empty__s">Add a feed or refresh existing ones</p>
       </div>
       {{end}}
+      {{if and (gt (len .Articles) 0) (gt .Limit 0)}}
+      <div class="load-more" id="load-more-area">
+        <button class="btn btn--ghost w-full"
+          hx-get="/?feed_id={{.FeedID}}{{if .UnreadOnly}}&unread=1{{end}}&offset={{add .Offset .Limit}}&limit={{.Limit}}"
+          hx-target="#load-more-area" hx-swap="outerHTML"
+          hx-trigger="click"
+          hx-indicator="#loading">
+          Load more articles
+        </button>
+      </div>
+      {{end}}
     </section>
   </main>
+  <div class="shortcuts-overlay" id="shortcuts-overlay" hidden>
+    <div class="shortcuts-card">
+      <div class="shortcuts-card__head">
+        <h3>Keyboard Shortcuts</h3>
+        <button class="btn btn--ghost" onclick="document.getElementById('shortcuts-overlay').hidden=true">✕</button>
+      </div>
+      <table class="shortcuts-table">
+        <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Navigate articles up/down</td></tr>
+        <tr><td><kbd>r</kbd></td><td>Toggle read/unread on focused article</td></tr>
+        <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>Navigate feeds next/previous</td></tr>
+        <tr><td><kbd>f</kbd></td><td>Focus add-feed input</td></tr>
+        <tr><td><kbd>?</kbd></td><td>Show/hide this help</td></tr>
+      </table>
+    </div>
+  </div>
 </body>
 </html>
 `
@@ -601,6 +700,19 @@ const dashboardTemplate = `
 const feedListTemplate = `
 <div class="panel">
   <div class="panel__head"><span class="panel__title"><b>≡</b> Pen</span></div>
+  <div class="add-feed add-feed--top">
+    <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
+      <input type="url" name="url" placeholder="RSS / Atom URL" required class="input input--sm" id="add-feed-input">
+      <button type="submit" class="btn btn--primary btn--mini">Add</button>
+    </form>
+  </div>
+  <div class="feed">
+    <a href="/" class="feed__row feed__row--all"
+       hx-get="/" hx-target="#article-list" hx-push-url="true"
+       hx-indicator="#loading">
+      <span class="feed__title">All articles</span>
+    </a>
+  </div>
   {{range .Feeds}}
   <div class="feed" data-feed-id="{{.ID}}">
     <a href="/?feed_id={{.ID}}" class="feed__row"
@@ -644,6 +756,19 @@ const feedListTemplate = `
 // keeping sidebar badges in sync without any client-side arithmetic.
 const feedSidebarOOBTemplate = `
 <div id="feed-sidebar-inner" hx-swap-oob="true">
+  <div class="add-feed add-feed--top">
+    <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
+      <input type="url" name="url" placeholder="RSS / Atom URL" required class="input input--sm" id="add-feed-input">
+      <button type="submit" class="btn btn--primary btn--mini">Add</button>
+    </form>
+  </div>
+  <div class="feed">
+    <a href="/" class="feed__row feed__row--all"
+       hx-get="/" hx-target="#article-list" hx-push-url="true"
+       hx-indicator="#loading">
+      <span class="feed__title">All articles</span>
+    </a>
+  </div>
   {{range .Feeds}}
   <div class="feed" data-feed-id="{{.ID}}">
     <a href="/?feed_id={{.ID}}" class="feed__row"
@@ -683,6 +808,18 @@ const feedSidebarOOBTemplate = `
 `
 
 const articleListTemplate = `
+<div class="stream__bar">
+  {{if .FeedID}}
+  <h2 class="stream__heading">
+    Filtering by feed
+    <a href="/{{if .UnreadOnly}}?unread=1{{end}}" class="btn btn--ghost btn--mini" style="font-size:.7rem">✕ Clear</a>
+  </h2>
+  {{end}}
+  <div class="stream__toggles">
+    <a href="/?feed_id={{.FeedID}}" class="chip{{if not .UnreadOnly}} chip--on{{end}}" id="filter-all">All</a>
+    <a href="/?feed_id={{.FeedID}}&unread=1" class="chip{{if .UnreadOnly}} chip--on{{end}}" id="filter-unread">Unread</a>
+  </div>
+</div>
 {{range .Articles}}
 <div class="card{{if not .IsRead}} is-unread{{end}}{{if .IsRead}} is-read{{end}}" data-article-id="{{.ID}}" data-feed-id="{{.FeedID}}">
   <div class="card__main">
@@ -691,7 +828,8 @@ const articleListTemplate = `
     </h3>
     <p class="card__meta">
       {{if .Author}}<span>{{deref .Author}}</span>{{end}}
-      <span class="card__pen">#{{.FeedID}}</span>
+      {{if .PublishedAt}}<span>{{timeAgo .PublishedAt}}</span>{{end}}
+      <a href="/?feed_id={{.FeedID}}" class="card__pen" hx-get="/?feed_id={{.FeedID}}" hx-target="#article-list" hx-push-url="true">{{if .FeedTitle}}{{.FeedTitle}}{{else}}#{{.FeedID}}{{end}}</a>
     </p>
     {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
   </div>
@@ -712,6 +850,57 @@ const articleListTemplate = `
   <div class="empty__mark">🐄</div>
   <p class="empty__t">No articles yet</p>
   <p class="empty__s">Add a feed or refresh existing ones</p>
+</div>
+{{end}}
+{{if and (gt (len .Articles) 0) (gt .Limit 0) (ge (len .Articles) .Limit)}}
+<div class="load-more" id="load-more-area">
+  <button class="btn btn--ghost w-full"
+    hx-get="/?feed_id={{.FeedID}}{{if .UnreadOnly}}&unread=1{{end}}&offset={{add .Offset .Limit}}&limit={{.Limit}}"
+    hx-target="#load-more-area" hx-swap="outerHTML"
+    hx-trigger="click"
+    hx-indicator="#loading">
+    Load more articles
+  </button>
+</div>
+{{end}}
+`
+
+const loadMoreTemplate = `
+{{range .Articles}}
+<div class="card{{if not .IsRead}} is-unread{{end}}{{if .IsRead}} is-read{{end}}" data-article-id="{{.ID}}" data-feed-id="{{.FeedID}}">
+  <div class="card__main">
+    <h3 class="card__title">
+      {{if .URL}}<a href="{{deref .URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>{{else}}{{.Title}}{{end}}
+    </h3>
+    <p class="card__meta">
+      {{if .Author}}<span>{{deref .Author}}</span>{{end}}
+      {{if .PublishedAt}}<span>{{timeAgo .PublishedAt}}</span>{{end}}
+      <a href="/?feed_id={{.FeedID}}" class="card__pen" hx-get="/?feed_id={{.FeedID}}" hx-target="#article-list" hx-push-url="true">{{if .FeedTitle}}{{.FeedTitle}}{{else}}#{{.FeedID}}{{end}}</a>
+    </p>
+    {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
+  </div>
+  <div class="card__actions">
+    <button hx-post="/articles/{{.ID}}/summarize" hx-target="closest .card" hx-swap="outerHTML"
+      class="card__summarize" title="Generate AI summary">
+      <span class="card__summarize-icon">✦</span>
+    </button>
+    <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
+      class="card__read" title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}"
+      data-read="{{.IsRead}}">
+      {{if not .IsRead}}●{{else}}○{{end}}
+    </button>
+  </div>
+</div>
+{{end}}
+{{if and (gt (len .Articles) 0) (gt .Limit 0) (ge (len .Articles) .Limit)}}
+<div class="load-more" id="load-more-area">
+  <button class="btn btn--ghost w-full"
+    hx-get="/?feed_id={{.FeedID}}{{if .UnreadOnly}}&unread=1{{end}}&offset={{add .Offset .Limit}}&limit={{.Limit}}"
+    hx-target="#load-more-area" hx-swap="outerHTML"
+    hx-trigger="click"
+    hx-indicator="#loading">
+    Load more articles
+  </button>
 </div>
 {{end}}
 `

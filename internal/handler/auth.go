@@ -68,8 +68,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	w.Header().Set("HX-Redirect", "/")
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	if r.Header.Get("HX-Request") != "" {
+		w.Header().Set("HX-Redirect", "/")
+		w.WriteHeader(http.StatusOK)
+	} else {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}
 }
 
 func (h *Handler) RegisterPage(w http.ResponseWriter, r *http.Request) {
@@ -156,8 +160,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	w.Header().Set("HX-Redirect", "/")
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	if r.Header.Get("HX-Request") != "" {
+		w.Header().Set("HX-Redirect", "/")
+		w.WriteHeader(http.StatusOK)
+	} else {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -177,9 +185,13 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Secure:   r.TLS != nil,
 	})
 
-	// HTMX redirect
-	w.Header().Set("HX-Redirect", "/login")
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	// HTMX redirect; fall back to 303 for non-HTMX clients
+	if r.Header.Get("HX-Request") != "" {
+		w.Header().Set("HX-Redirect", "/login")
+		w.WriteHeader(http.StatusOK)
+	} else {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	}
 }
 
 func (h *Handler) renderAuth(w http.ResponseWriter, r *http.Request, page, email, errorMsg string) {
@@ -225,11 +237,14 @@ const authPageTemplate = `
         <h2>Sign in</h2>
         <div class="field">
           <label for="email">Email</label>
-          <input type="email" id="email" name="email" value="{{.Email}}" required class="input" autofocus>
+          <input type="email" id="email" name="email" value="{{.Email}}" required class="input" autocomplete="email" autofocus>
         </div>
         <div class="field">
           <label for="password">Password</label>
-          <input type="password" id="password" name="password" required class="input">
+          <div class="password-wrap">
+            <input type="password" id="password" name="password" required class="input" autocomplete="current-password">
+            <button type="button" class="password-toggle" aria-label="Show password" onclick="togglePasswordVisibility(this, 'password')">👁</button>
+          </div>
         </div>
         <button type="submit" class="btn btn--primary w-full">Sign in</button>
         <p class="authswitch">Don't have an account? <a href="/register">Register</a></p>
@@ -239,15 +254,22 @@ const authPageTemplate = `
         <h2>Create account</h2>
         <div class="field">
           <label for="email">Email</label>
-          <input type="email" id="email" name="email" value="{{.Email}}" required class="input" autofocus>
+          <input type="email" id="email" name="email" value="{{.Email}}" required class="input" autocomplete="email" autofocus>
         </div>
         <div class="field">
           <label for="password">Password</label>
-          <input type="password" id="password" name="password" required minlength="8" class="input">
+          <div class="password-wrap">
+            <input type="password" id="password" name="password" required minlength="8" class="input" autocomplete="new-password">
+            <button type="button" class="password-toggle" aria-label="Show password" onclick="togglePasswordVisibility(this, 'password')">👁</button>
+          </div>
+          <p class="field-hint">At least 8 characters</p>
         </div>
         <div class="field">
           <label for="confirm_password">Confirm password</label>
-          <input type="password" id="confirm_password" name="confirm_password" required minlength="8" class="input">
+          <div class="password-wrap">
+            <input type="password" id="confirm_password" name="confirm_password" required minlength="8" class="input" autocomplete="new-password">
+            <button type="button" class="password-toggle" aria-label="Show password" onclick="togglePasswordVisibility(this, 'confirm_password')">👁</button>
+          </div>
         </div>
         <button type="submit" class="btn btn--primary w-full">Create account</button>
         <p class="authswitch">Already have an account? <a href="/login">Sign in</a></p>
