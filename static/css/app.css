@@ -668,17 +668,61 @@ button.htmx-request { opacity: .65; cursor: wait; }
   line-height: 1.55;
   color: var(--ink-soft);
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 6;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 /* Read/unread toggle — the brand stamp */
+.card__actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .45rem;
+  margin-top: .15rem;
+}
+
+.card__summarize {
+  width: 1.7rem;
+  height: 1.7rem;
+  display: grid;
+  place-items: center;
+  font-size: .72rem;
+  line-height: 1;
+  color: var(--ink-faint);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease, transform 120ms ease;
+  opacity: 0;
+}
+@media (hover: hover) {
+  .card:hover .card__summarize,
+  .card:focus-within .card__summarize { opacity: 1; }
+}
+
+/* On touch devices the button is always visible since hover is unreliable. */
+@media (hover: none) {
+  .card__summarize { opacity: 1; }
+}
+
+.card__summarize-icon {
+  display: inline-block;
+}
+
+.card__summarize:hover { color: var(--accent); background: var(--card-hover); transform: scale(1.08); }
+.card__summarize:active { color: var(--on-accent); background: var(--accent); }
+
+.card__summarize.htmx-request .card__summarize-icon {
+  animation: spin 0.7s linear infinite;
+}
+
 .card__read {
   flex-shrink: 0;
   width: 1.7rem;
   height: 1.7rem;
-  margin-top: .15rem;
   display: grid;
   place-items: center;
   font-size: .68rem;

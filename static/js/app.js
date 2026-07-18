@@ -38,7 +38,9 @@
     seenIds.add(id);
 
     // POST to backend (MarkRead handler returns 204, no OOB needed)
-    fetch('/articles/' + id + '/read', { method: 'POST' })['catch'](function() {});
+    fetch('/articles/' + id + '/read', { method: 'POST' })['catch'](function(err) {
+      console.error('Failed to mark article', id, 'read:', err);
+    });
 
     // Update card UI
     card.classList.add('is-read');
@@ -222,7 +224,8 @@
           }
           postNext(i + 1);
         })
-        ['catch'](function() {
+        ['catch'](function(err) {
+          console.error('Failed to mark article', ids[i], 'read:', err);
           postNext(i + 1);
         });
     }

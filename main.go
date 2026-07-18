@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
 
+	"github.com/james/feedlot/internal/ai"
 	"github.com/james/feedlot/internal/auth"
 	"github.com/james/feedlot/internal/db"
 	"github.com/james/feedlot/internal/feeds"
@@ -56,7 +57,7 @@ func main() {
 
 	// ─── Dependencies ──────────────────────────────────────────────────────
 	authService := auth.New(jwtSecret)
-	h := handler.New(database, authService, encryptionKey, opencodeGoKey)
+	h := handler.New(database, authService, ai.New(), encryptionKey, opencodeGoKey)
 
 	// ─── Background Feed Refresher ─────────────────────────────────────────
 	refreshInterval := getEnvDuration("FEEDLOT_REFRESH_INTERVAL", 30*time.Minute)
@@ -69,7 +70,6 @@ func main() {
 
 	// Middleware
 	r.Use(chimw.RequestID)
-	r.Use(chimw.RealIP)
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.Timeout(60 * time.Second))
@@ -109,6 +109,7 @@ func main() {
 		r.Get("/articles/{id}", h.ShowArticle)
 		r.Post("/articles/{id}/toggle", h.ToggleRead)
 		r.Post("/articles/{id}/read", h.MarkRead)
+		r.Post("/articles/{id}/summarize", h.SummarizeArticle)
 		r.Get("/settings", h.SettingsPage)
 		r.Post("/settings", h.SaveSettings)
 		r.Post("/settings/test", h.TestSettings)

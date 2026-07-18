@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -16,8 +17,6 @@ import (
 	"github.com/james/feedlot/internal/feeds"
 	"github.com/james/feedlot/internal/model"
 )
-
-var summarizer = ai.New()
 
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	userID := GetUserID(r)
@@ -45,6 +44,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// This avoids the hx-select nesting bug where the entire <section id="article-list">
 	// from the full page gets nested inside the existing one.
 	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		data := map[string]any{
 			"Articles": articles,
 		}
@@ -92,6 +92,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListFeeds(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	userID := GetUserID(r)
 
 	feedsList, err := h.DB.GetUserFeeds(userID)
@@ -114,10 +115,10 @@ func (h *Handler) ListFeeds(w http.ResponseWriter, r *http.Request) {
 // ─── OPML Import ─────────────────────────────────────────────────────────
 
 type opmlDocument struct {
-	XMLName xml.Name   `xml:"opml"`
-	Version string     `xml:"version,attr"`
-	Head    opmlHead   `xml:"head"`
-	Body    opmlBody   `xml:"body"`
+	XMLName xml.Name `xml:"opml"`
+	Version string   `xml:"version,attr"`
+	Head    opmlHead `xml:"head"`
+	Body    opmlBody `xml:"body"`
 }
 
 type opmlHead struct {
@@ -366,7 +367,7 @@ func (h *Handler) RefreshFeed(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if stored.Content != nil && *stored.Content != "" {
-			summary, err := summarizer.Summarize(h.buildSummaryRequest(settings, *stored.Content))
+			summary, err := h.Summarizer.Summarize(h.buildSummaryRequest(r.Context(), settings, *stored.Content))
 			if err != nil {
 				log.Printf("summarize article %d: %v", stored.ID, err)
 				continue
@@ -384,6 +385,7 @@ func (h *Handler) RefreshFeed(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListArticlesByFeed(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	userID := GetUserID(r)
 	feedIDStr := r.URL.Query().Get("feed_id")
 
@@ -393,7 +395,7 @@ func (h *Handler) ListArticlesByFeed(w http.ResponseWriter, r *http.Request) {
 	if feedIDStr != "" {
 		fid, convErr := strconv.ParseInt(feedIDStr, 10, 64)
 		if convErr == nil {
-			articles, err = h.DB.GetArticlesByFeedID(fid)
+			articles, err = h.DB.GetArticlesByUserID(userID, &fid)
 		} else {
 			articles, err = h.DB.GetArticlesByUserID(userID, nil)
 		}
@@ -417,8 +419,9 @@ func (h *Handler) ListArticlesByFeed(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) buildSummaryRequest(settings *model.UserSettings, content string) ai.SummaryRequest {
+func (h *Handler) buildSummaryRequest(ctx context.Context, settings *model.UserSettings, content string) ai.SummaryRequest {
 	req := ai.SummaryRequest{
+		Context:     ctx,
 		ArticleText: content,
 		Length:      "short",
 		SummaryLang: "english",
@@ -570,11 +573,17 @@ const dashboardTemplate = `
           </p>
           {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
         </div>
-        <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
-          class="card__read" title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}"
-          data-read="{{.IsRead}}">
-          {{if not .IsRead}}●{{else}}○{{end}}
-        </button>
+        <div class="card__actions">
+          <button hx-post="/articles/{{.ID}}/summarize" hx-target="closest .card" hx-swap="outerHTML"
+            class="card__summarize" title="Generate AI summary">
+            <span class="card__summarize-icon">✦</span>
+          </button>
+          <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
+            class="card__read" title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}"
+            data-read="{{.IsRead}}">
+            {{if not .IsRead}}●{{else}}○{{end}}
+          </button>
+        </div>
       </div>
       {{else}}
       <div class="empty">
@@ -686,11 +695,17 @@ const articleListTemplate = `
     </p>
     {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
   </div>
-  <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
-    class="card__read" title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}"
-    data-read="{{.IsRead}}">
-    {{if not .IsRead}}●{{else}}○{{end}}
-  </button>
+  <div class="card__actions">
+    <button hx-post="/articles/{{.ID}}/summarize" hx-target="closest .card" hx-swap="outerHTML"
+      class="card__summarize" title="Generate AI summary">
+      <span class="card__summarize-icon">✦</span>
+    </button>
+    <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
+      class="card__read" title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}"
+      data-read="{{.IsRead}}">
+      {{if not .IsRead}}●{{else}}○{{end}}
+    </button>
+  </div>
 </div>
 {{else}}
 <div class="empty">

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/james/feedlot/internal/ai"
 	"github.com/james/feedlot/internal/auth"
 	"github.com/james/feedlot/internal/db"
 )
@@ -15,14 +16,16 @@ const userIDKey contextKey = "user_id"
 type Handler struct {
 	DB            *db.DB
 	Auth          *auth.Auth
+	Summarizer    *ai.Summarizer
 	EncryptionKey string
 	OpenCodeGoKey string
 }
 
-func New(database *db.DB, a *auth.Auth, encryptionKey string, opencodeGoKey string) *Handler {
+func New(database *db.DB, a *auth.Auth, summarizer *ai.Summarizer, encryptionKey string, opencodeGoKey string) *Handler {
 	return &Handler{
 		DB:            database,
 		Auth:          a,
+		Summarizer:    summarizer,
 		EncryptionKey: encryptionKey,
 		OpenCodeGoKey: opencodeGoKey,
 	}

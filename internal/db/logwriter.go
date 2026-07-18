@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -29,7 +30,7 @@ func (w *LogWriter) Write(p []byte) (n int, err error) {
 	msg := strings.TrimRight(string(p), "\n\r\t ")
 	w.mu.Lock()
 	if err := w.db.InsertLog("info", msg); err != nil {
-		log.Printf("failed to write log to db: %v", err)
+		fmt.Fprintf(w.out, "failed to write log to db: %v\n", err)
 	}
 	w.mu.Unlock()
 

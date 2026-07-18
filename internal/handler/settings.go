@@ -91,9 +91,10 @@ func (h *Handler) ListModelsHandler(w http.ResponseWriter, r *http.Request) {
 		Provider: provider,
 		APIKey:   apiKey,
 		BaseURL:  baseURL,
+		Context:  r.Context(),
 	}
 
-	models, err := summarizer.ListModels(req)
+	models, err := h.Summarizer.ListModels(req)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -125,6 +126,7 @@ func (h *Handler) ListModelsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) TestSettings(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	userID := GetUserID(r)
 
 	if err := r.ParseForm(); err != nil {
@@ -178,9 +180,10 @@ func (h *Handler) TestSettings(w http.ResponseWriter, r *http.Request) {
 		APIKey:   apiKey,
 		Model:    modelName,
 		BaseURL:  baseURL,
+		Context:  r.Context(),
 	}
 
-	err := summarizer.TestConnection(req)
+	err := h.Summarizer.TestConnection(req)
 
 	if err != nil {
 		w.Write([]byte(`<div class="alert alert--err" style="margin-top:.5rem">Test failed: ` + html.EscapeString(err.Error()) + `</div>`))
