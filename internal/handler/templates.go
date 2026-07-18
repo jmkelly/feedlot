@@ -1,6 +1,61 @@
 package handler
 
-import "html/template"
+import (
+	"fmt"
+	"html/template"
+	"time"
+)
+
+// timeAgo returns a relative time string like "2 hours ago" or "3 days ago".
+// It accepts *time.Time (from model) or time.Time.
+func timeAgo(t interface{}) string {
+	var tm time.Time
+	switch v := t.(type) {
+	case *time.Time:
+		if v == nil {
+			return ""
+		}
+		tm = *v
+	case time.Time:
+		tm = v
+	default:
+		return ""
+	}
+
+	diff := time.Since(tm)
+	if diff < 0 {
+		return "just now"
+	}
+
+	switch {
+	case diff < time.Minute:
+		return "just now"
+	case diff < 2*time.Minute:
+		return "1 minute ago"
+	case diff < time.Hour:
+		return fmt.Sprintf("%d minutes ago", int(diff.Minutes()))
+	case diff < 2*time.Hour:
+		return "1 hour ago"
+	case diff < 24*time.Hour:
+		return fmt.Sprintf("%d hours ago", int(diff.Hours()))
+	case diff < 2*24*time.Hour:
+		return "1 day ago"
+	case diff < 30*24*time.Hour:
+		return fmt.Sprintf("%d days ago", int(diff.Hours()/24))
+	case diff < 12*30*24*time.Hour:
+		months := int(diff.Hours() / (24 * 30))
+		if months == 1 {
+			return "1 month ago"
+		}
+		return fmt.Sprintf("%d months ago", months)
+	default:
+		years := int(diff.Hours() / (24 * 365))
+		if years == 1 {
+			return "1 year ago"
+		}
+		return fmt.Sprintf("%d years ago", years)
+	}
+}
 
 // Pre-parsed templates — parsed once at package init instead of on every request.
 var (
@@ -13,9 +68,7 @@ var (
 			}
 			return *s
 		},
-		"timeAgo": func(t interface{}) string {
-			return "recently"
-		},
+		"timeAgo": timeAgo,
 	}).Parse(dashboardTemplate))
 
 	feedListTmpl = template.Must(template.New("feed-list").Funcs(template.FuncMap{
@@ -43,9 +96,7 @@ var (
 			}
 			return *s
 		},
-		"timeAgo": func(t interface{}) string {
-			return "recently"
-		},
+		"timeAgo": timeAgo,
 	}).Parse(articleListTemplate))
 
 	articleCardTmpl = template.Must(template.New("article-card").Funcs(template.FuncMap{
