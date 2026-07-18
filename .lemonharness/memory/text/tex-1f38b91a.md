@@ -2,14 +2,16 @@
 id: tex-1f38b91a
 type: pattern
 created_at: 2026-07-18T07:20:46.924Z
-updated_at: 2026-07-18T07:52:17.707Z
-source_count: 10
+updated_at: 2026-07-18T07:54:33.090Z
+source_count: 12
 reuse_count: 0
 success_count: 0
 failure_count: 0
 confidence: 0.000
 tags: [workspace_install_dep, error, avoid, lesson]
 ---
+# workspace_install_dep failed
+# workspace_install_dep failed
 # workspace_install_dep failed
 # workspace_install_dep failed
 # workspace_install_dep failed

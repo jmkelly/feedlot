@@ -1,15 +1,15 @@
 {
-  "totalSessions": 38,
-  "lastUpdated": 1784361132630,
+  "totalSessions": 40,
+  "lastUpdated": 1784361268019,
   "recent5Avg": {
     "errorRate": 0.7272727272727273,
     "validationPassRate": 0,
     "budgetUtilization": 100,
-    "filesPerSession": 3
+    "filesPerSession": 2.8
   },
   "allTimeAvg": {
-    "errorRate": 2.486923038193206,
-    "validationPassRate": 2.631578947368421,
+    "errorRate": 2.3625768862835455,
+    "validationPassRate": 2.5,
     "budgetUtilization": 100
   },
   "trend": "⚠️ degrading (errors increasing)"

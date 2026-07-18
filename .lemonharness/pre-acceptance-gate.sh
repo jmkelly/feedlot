@@ -13,7 +13,12 @@
 set -euo pipefail
 
 # Default scan targets
-SCAN_TARGETS=("${@:-src .pi .lemonharness}")
+# For Go projects: scan project root instead of src/
+if [ -f "go.mod" ] && [ $# -eq 0 ]; then
+  SCAN_TARGETS=(". .pi .lemonharness")
+else
+  SCAN_TARGETS=("${@:-src .pi .lemonharness}")
+fi
 PASSED=0
 FAILED=0
 WARNINGS=0

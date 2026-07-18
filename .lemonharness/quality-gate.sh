@@ -22,7 +22,10 @@ echo ""
 
 # ── Language Detection ────────────────────────────────────────────
 detect_language() {
-  if [ -f "requirements.txt" ] || [ -f "setup.py" ] || [ -f "pyproject.toml" ] || [ -f "Pipfile" ]; then
+  if [ -f "go.mod" ]; then
+    echo "  📐 Go project detected"
+    LANGUAGE="go"
+  elif [ -f "requirements.txt" ] || [ -f "setup.py" ] || [ -f "pyproject.toml" ] || [ -f "Pipfile" ]; then
     echo "  📐 Python project detected"
     LANGUAGE="python"
   elif [ -f "package.json" ]; then
@@ -39,6 +42,9 @@ detect_language() {
     elif find "$TARGET" -name "*.cs" 2>/dev/null | head -1 | grep -q .; then
       echo "  📐 Detected C# files"
       LANGUAGE="dotnet"
+    elif find "$TARGET" -name "*.go" 2>/dev/null | head -1 | grep -q .; then
+      echo "  📐 Detected Go files"
+      LANGUAGE="go"
     else
       echo "  ⚠  Could not detect language — running generic checks only"
       LANGUAGE="unknown"
@@ -94,10 +100,10 @@ fi
 echo ""
 
 # ── 2. Extension Factory Check ────────────────────────────────────
-echo "─── 🏭 Extension Factory Check ───"
+# Only relevant for pi extension projects (TypeScript)
 EXT_BAD=0
-# Check that all extension directories have index.ts with export default function
-if [ -d ".pi/extensions" ]; then
+if [ "$LANGUAGE" = "typescript" ] && [ -d ".pi/extensions" ]; then
+  echo "─── 🏭 Extension Factory Check ───"
   # Check each subdirectory entry point
   while IFS= read -r -d '' dir; do
     index_file="$dir/index.ts"
@@ -152,6 +158,19 @@ if [ "$LANGUAGE" = "typescript" ] && command -v npx &>/dev/null; then
       echo "  ✅ All .ts files pass syntax parse check"
     fi
   fi
+elif [ "$LANGUAGE" = "go" ] && command -v go &>/dev/null; then
+  # Go: use go vet for parse + basic type checking
+  echo "  Go check (go vet)..."
+  GOVET_OUTPUT=$(go vet ./... 2>&1 || true)
+  if [ -z "$GOVET_OUTPUT" ]; then
+    echo "  ✅ All .go files pass go vet"
+  else
+    GOVET_COUNT=$(echo "$GOVET_OUTPUT" | grep -c "." || true)
+    echo "$GOVET_OUTPUT" | head -20
+    echo "  ❌ $GOVET_COUNT go vet issue(s)"
+    PARSE_BAD=$GOVET_COUNT
+    FAILED=$((FAILED + PARSE_BAD * 5))
+  fi
 elif command -v node &>/dev/null; then
   # JavaScript: use node --check for .js files only
   while IFS= read -r -d '' f; do
@@ -170,7 +189,7 @@ elif command -v node &>/dev/null; then
     echo "  ✅ All .js files pass syntax parse check"
   fi
 else
-  echo "  ⚠  No parser available (node/tsc) — skipping parse check"
+  echo "  ⚠  No parser available (go vet/node/tsc) — skipping parse check"
   WARNINGS=$((WARNINGS + 1))
 fi
 echo ""
@@ -286,6 +305,46 @@ case "$LANGUAGE" in
     fi
     ;;
 
+  go)
+    if command -v go &>/dev/null; then
+      echo "  Checking gofmt (formatting)..."
+      GOFMT_OUTPUT=$(gofmt -d "$TARGET" 2>&1 || true)
+      if [ -n "$GOFMT_OUTPUT" ]; then
+        GOFMT_COUNT=$(echo "$GOFMT_OUTPUT" | grep -c "^@" || true)
+        echo "$GOFMT_OUTPUT" | head -30
+        echo "  ❌ $GOFMT_COUNT file(s) not gofmt-formatted"
+        FAILED=$((FAILED + GOFMT_COUNT))
+      else
+        echo "  ✅ All .go files pass gofmt"
+      fi
+
+      echo "  Running go vet..."
+      if GOVET_OUT=$(go vet ./... 2>&1); then
+        echo "  ✅ go vet passed cleanly"
+      else
+        GOVET_COUNT=$(echo "$GOVET_OUT" | grep -cE "^(\./|#)" || echo 1)
+        echo "$GOVET_OUT" | head -20
+        echo "  ❌ $GOVET_COUNT go vet warning(s)/error(s)"
+        FAILED=$((FAILED + GOVET_COUNT))
+      fi
+
+      if command -v staticcheck &>/dev/null; then
+        echo "  Running staticcheck..."
+        if STATIC_OUT=$(staticcheck ./... 2>&1); then
+          echo "  ✅ staticcheck passed cleanly"
+        else
+          STATIC_COUNT=$(echo "$STATIC_OUT" | grep -c "." || true)
+          echo "$STATIC_OUT" | head -20
+          echo "  ⚠  $STATIC_COUNT staticcheck issue(s) (advisory)"
+          WARNINGS=$((WARNINGS + STATIC_COUNT))
+        fi
+      fi
+    else
+      echo "  ⚠  go not installed — skipping Go lint checks"
+      WARNINGS=$((WARNINGS + 1))
+    fi
+    ;;
+
   dotnet)
       echo "  ℹ  .NET checks not applicable to this project"
       ;;
@@ -357,6 +416,37 @@ case "$LANGUAGE" in
     else
       echo "  ❌ No test runner found (vitest). Install: npm install --save-dev vitest"
       FAILED=$((FAILED + 1))
+    fi
+    ;;
+
+  go)
+    if command -v go &>/dev/null; then
+      TEST_DIRS=$(find . -type d -name "*_test" 2>/dev/null | head -1)
+      TEST_FILES=$(find . -name "*_test.go" 2>/dev/null | head -5)
+      if [ -z "$TEST_FILES" ]; then
+        echo "  ❌ No Go test files found (*_test.go) — consider adding tests"
+        FAILED=$((FAILED + 1))
+      else
+        echo "  ✅ Test files present: $(echo "$TEST_FILES" | wc -l) test file(s)"
+        # Run tests
+        if GOTEST_OUT=$(go test ./... -count=1 2>&1); then
+          echo "$GOTEST_OUT" | tail -5
+          echo "  ✅ All Go tests pass"
+          PASSED=$((PASSED + 1))
+        else
+          echo "$GOTEST_OUT" | tail -20
+          echo "  ❌ Go tests failed"
+          FAILED=$((FAILED + 1))
+        fi
+        # Coverage check (advisory)
+        if GOVET_OUT=$(go test ./... -cover -count=1 2>&1); then
+          COV_LINE=$(echo "$GOVET_OUT" | grep -E "ok\s+" | head -1 || true)
+          echo "  📊 $COV_LINE"
+        fi
+      fi
+    else
+      echo "  ⚠  go not installed — skipping Go test checks"
+      WARNINGS=$((WARNINGS + 1))
     fi
     ;;
 
