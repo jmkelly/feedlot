@@ -563,7 +563,7 @@ const dashboardTemplate = `
           <div class="feed{{if eq $.FeedID (printf "%d" .ID)}} feed--active{{end}}" data-feed-id="{{.ID}}">
             <a href="/?feed_id={{.ID}}" class="feed__row"
                hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
-               hx-indicator="#loading" hx-trigger="click[preventDefault]">
+               hx-indicator="#loading">
               <span class="feed__title">{{.Title}}</span>
               {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
             </a>
@@ -639,7 +639,7 @@ const feedListTemplate = `
   <div class="feed" data-feed-id="{{.ID}}">
     <a href="/?feed_id={{.ID}}" class="feed__row"
        hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
-       hx-indicator="#loading" hx-trigger="click[preventDefault]">
+       hx-indicator="#loading">
       <span class="feed__title">{{.Title}}</span>
       {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
     </a>

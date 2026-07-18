@@ -7,6 +7,7 @@
   // ─── State ──────────────────────────────────────────────────────────
 
   const seenIds = new Set();
+  const toggleStateStore = new Map();
   let scrollObserver = null;
   let scrollMarkReadEnabled = localStorage.getItem('feedlot:scrollMarkRead') === 'true';
   let focusedArticleIndex = -1;
@@ -29,6 +30,25 @@
     return btn.getAttribute('title') === 'Mark read' || btn.textContent.trim() === '\u25CF';
   }
 
+  /** Adjust a feed's unread badge by a delta (-1 for marking read, +1 for marking unread) */
+  function adjustFeedBadge(feedId, delta) {
+    if (!feedId) return;
+    var feedItem = document.querySelector('.feed[data-feed-id="' + feedId + '"]');
+    if (!feedItem) return;
+    var badge = feedItem.querySelector('.ear-tag');
+    if (badge) {
+      var count = parseInt(badge.textContent.trim(), 10);
+      if (!isNaN(count)) {
+        count += delta;
+        if (count <= 0) {
+          badge.remove();
+        } else {
+          badge.textContent = count;
+        }
+      }
+    }
+  }
+
   /** Mark a single card as read: POST, update classes, decrement badge */
   function markCardRead(card) {
     var id = getArticleId(card);
@@ -47,24 +67,7 @@
     }, 800);
 
     // Decrement matching feed badge
-    var feedId = card.getAttribute('data-feed-id');
-    if (feedId) {
-      var feedItem = document.querySelector('.feed[data-feed-id="' + feedId + '"]');
-      if (feedItem) {
-        var badge = feedItem.querySelector('.ear-tag');
-        if (badge) {
-          var count = parseInt(badge.textContent.trim(), 10);
-          if (!isNaN(count)) {
-            count--;
-            if (count <= 0) {
-              badge.remove();
-            } else {
-              badge.textContent = count;
-            }
-          }
-        }
-      }
-    }
+    adjustFeedBadge(card.getAttribute('data-feed-id'), -1);
   }
 
   /** Find an article card by its ID */
@@ -212,6 +215,7 @@
             card.classList.remove('is-unread');
             card.classList.add('is-marked');
             setTimeout(function() { card.classList.remove('is-marked'); }, 800);
+            adjustFeedBadge(card.getAttribute('data-feed-id'), -1);
           }
           postNext(i + 1);
         })
@@ -430,15 +434,38 @@
     seenIds.clear();
     wireControls();
     rescanCards();
+
+    // Apply pending sidebar badge adjustments from toggle operations
+    toggleStateStore.forEach(function(state) {
+      adjustFeedBadge(state.feedId, state.delta);
+    });
+    toggleStateStore.clear();
   });
 
-  // Show loading animation during feed refresh
+  // Capture toggle state so we can update sidebar badges after the swap
   document.addEventListener('htmx:beforeRequest', function(e) {
     var trigger = e.detail.elt;
-    if (trigger && trigger.hasAttribute('hx-post') && trigger.getAttribute('hx-post').indexOf('/refresh') !== -1) {
+    if (!trigger) return;
+    var post = trigger.getAttribute('hx-post') || '';
+
+    // Feed refresh loading animation
+    if (post.indexOf('/refresh') !== -1) {
       trigger.textContent = '⟳';
       trigger.style.animation = 'spin 1s linear infinite';
+      return;
     }
+
+    // Track toggle-before state for sidebar badge adjustment
+    var match = post.match(/\/articles\/(\d+)\/toggle/);
+    if (!match) return;
+    var articleId = match[1];
+    var card = trigger.closest('.card');
+    if (!card) return;
+    var wasUnread = trigger.getAttribute('title') === 'Mark read';
+    toggleStateStore.set(articleId, {
+      feedId: card.getAttribute('data-feed-id'),
+      delta: wasUnread ? -1 : 1
+    });
   });
 
   document.addEventListener('htmx:afterRequest', function(e) {
