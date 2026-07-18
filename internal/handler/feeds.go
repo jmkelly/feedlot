@@ -48,10 +48,27 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Load settings for AI status indicator
+	settings, err := h.DB.GetUserSettings(userID)
+	if err != nil {
+		log.Printf("get user settings: %v", err)
+	}
+	settingsProvider := "not configured"
+	settingsModel := ""
+	settingsConfigured := false
+	if settings != nil {
+		settingsConfigured = settings.APIKeyEncrypted != nil && *settings.APIKeyEncrypted != ""
+		settingsProvider = settings.AIProvider
+		settingsModel = settings.ModelName
+	}
+
 	data := map[string]any{
-		"Feeds":    feeds,
-		"Articles": articles,
-		"FeedID":   feedIDStr,
+		"Feeds":              feeds,
+		"Articles":           articles,
+		"FeedID":             feedIDStr,
+		"SettingsProvider":   settingsProvider,
+		"SettingsModel":      settingsModel,
+		"SettingsConfigured": settingsConfigured,
 	}
 
 	if err := dashboardTmpl.Execute(w, data); err != nil {
@@ -174,7 +191,10 @@ func (h *Handler) ImportOPML(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get existing user feeds to skip duplicates
-	existingFeeds, _ := h.DB.GetUserFeeds(userID)
+	existingFeeds, err := h.DB.GetUserFeeds(userID)
+	if err != nil {
+		log.Printf("get existing feeds: %v", err)
+	}
 	existingURLs := make(map[string]bool, len(existingFeeds))
 	for _, f := range existingFeeds {
 		existingURLs[f.FeedURL] = true
@@ -214,7 +234,8 @@ func (h *Handler) ImportOPML(w http.ResponseWriter, r *http.Request) {
 		for _, article := range result.Articles {
 			article.FeedID = feed.ID
 			if _, err := h.DB.CreateArticle(article); err != nil {
-				continue // skip duplicates
+				log.Printf("skip article during OPML import (likely duplicate): %v", err)
+				continue
 			}
 		}
 
@@ -245,7 +266,10 @@ func (h *Handler) AddFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if feed already exists for this user
-	userFeeds, _ := h.DB.GetUserFeeds(userID)
+	userFeeds, err := h.DB.GetUserFeeds(userID)
+	if err != nil {
+		log.Printf("get user feeds: %v", err)
+	}
 	for _, f := range userFeeds {
 		if f.FeedURL == feedURL {
 			http.Error(w, "Feed already subscribed", http.StatusConflict)
@@ -330,7 +354,10 @@ func (h *Handler) RefreshFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user settings for AI provider
-	settings, _ := h.DB.GetUserSettings(userID)
+	settings, err := h.DB.GetUserSettings(userID)
+	if err != nil {
+		log.Printf("get user settings: %v", err)
+	}
 
 	// Count new articles
 	newCount := 0
@@ -340,7 +367,7 @@ func (h *Handler) RefreshFeed(w http.ResponseWriter, r *http.Request) {
 
 		stored, err := h.DB.CreateArticle(article)
 		if err != nil {
-			// Duplicate — skip
+			log.Printf("skip article during refresh (likely duplicate): %v", err)
 			continue
 		}
 		newCount++
@@ -432,220 +459,230 @@ func (h *Handler) buildSummaryRequest(settings *model.UserSettings, content stri
 	}
 
 	if req.Provider == "" {
-		req.Provider = "openai"
+		req.Provider = "opencode-go"
 	}
 	if req.Model == "" {
-		req.Model = "gpt-4o-mini"
+		switch req.Provider {
+		case "opencode-go":
+			req.Model = "deepseek-v4-flash"
+		default:
+			req.Model = "gpt-4o-mini"
+		}
+	}
+
+	// Fallback to global OpenCode Go key if user hasn't set one
+	if req.APIKey == "" && req.Provider == "opencode-go" && h.OpenCodeGoKey != "" {
+		req.APIKey = h.OpenCodeGoKey
 	}
 
 	return req
 }
 
+func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
+	userID := GetUserID(r)
+	idStr := chi.URLParam(r, "id")
+	
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid article ID", http.StatusBadRequest)
+		return
+	}
+	
+	if err := h.DB.MarkArticleRead(id, userID); err != nil {
+		log.Printf("mark article read: %v", err)
+	}
+	
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ─── Inline Templates ──────────────────────────────────────────────────────
 
-const dashboardTemplate = `<!DOCTYPE html>
+const dashboardTemplate = `
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Feedlot — Dashboard</title>
+  <script>(function(){var t=null;try{t=localStorage.getItem('feedlot:theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=JetBrains+Mono:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..600&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/htmx.org@2"></script>
   <script src="/static/js/app.js" defer></script>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
-<body class="bg-stone-50 text-stone-900 antialiased">
-  <nav class="bg-white border-b border-stone-200 shadow-sm">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-14">
-        <div class="flex items-center gap-3">
-          <span class="text-2xl">🐄</span>
-          <h1 class="text-lg font-bold text-amber-800">Feedlot</h1>
-        </div>
-        <div class="flex items-center gap-4">
-          <a href="/settings" class="text-stone-500 hover:text-stone-700 text-sm font-medium">Settings</a>
-          <form hx-post="/logout" hx-target="body" hx-swap="outerHTML" class="inline">
-            <button type="submit" class="text-stone-500 hover:text-red-600 text-sm font-medium">Log out</button>
-          </form>
-        </div>
-      </div>
+<body>
+  <nav class="topbar">
+    <div class="topbar__brand">
+      <span class="topbar__mark">🐄</span>
+      <span class="topbar__name">Feedlot</span>
+      <span class="topbar__tag">Field Station</span>
     </div>
+    <div class="topbar__spacer"></div>
+    <div class="topbar__actions">
+      <button class="btn btn--ghost" id="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme"></button>
+      <button class="chip" id="scroll-read-toggle" aria-pressed="true" title="Mark articles read as you scroll past them">
+        <span class="chip__dot"></span> Auto-read
+      </button>
+      <button class="btn btn--ghost" id="mark-all-read" title="Mark all visible articles read">Mark read</button>
+      <span class="ai-status" title="AI: {{.SettingsProvider}} / {{.SettingsModel}}">
+        <span class="ai-status__dot{{if .SettingsConfigured}} ai-status__dot--on{{end}}"></span>
+        <span class="ai-status__label">{{.SettingsProvider}}</span>
+      </span>
+      <a href="/settings" class="btn btn--ghost">Settings</a>
+      <a href="/admin/logs" class="btn btn--ghost">Admin</a>
+      <form hx-post="/logout" hx-target="body" hx-swap="outerHTML" class="flex">
+        <button type="submit" class="btn btn--ghost">Log out</button>
+      </form>
+    </div>
+    <div class="progress"><div class="progress__bar" id="progress-bar"></div></div>
   </nav>
 
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-    <div class="flex gap-6">
-      <!-- Sidebar: Feed List -->
-      <aside id="feed-sidebar" class="w-72 flex-shrink-0">
-        <div class="bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden" hx-get="/feeds" hx-trigger="load" hx-target="#feed-sidebar-inner">
-          <div id="feed-sidebar-inner">
-            <div class="p-4 border-b border-stone-100">
-              <h2 class="text-sm font-semibold text-stone-500 uppercase tracking-wider">Feeds</h2>
+  <main class="layout">
+    <aside id="feed-sidebar" class="sidebar">
+      <div class="panel" hx-get="/feeds" hx-trigger="load" hx-target="#feed-sidebar-inner">
+        <div id="feed-sidebar-inner">
+          <div class="panel__head"><span class="panel__title"><b>≡</b> Pen</span></div>
+          {{range .Feeds}}
+          <div class="feed{{if eq $.FeedID (printf "%d" .ID)}} feed--active{{end}}" data-feed-id="{{.ID}}">
+            <a href="/?feed_id={{.ID}}" class="feed__row"
+               hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
+               hx-indicator="#loading">
+              <span class="feed__title">{{.Title}}</span>
+              {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
+            </a>
+            <div class="feed__tools">
+              <button hx-post="/feeds/{{.ID}}/refresh" hx-target="#article-list" hx-indicator="#loading" class="tool" title="Refresh">↻</button>
+              <button hx-delete="/feeds/{{.ID}}" hx-target="closest .feed" hx-swap="outerHTML swap:0.3s"
+                hx-confirm="Remove this feed?" class="tool tool--del" title="Remove">✕</button>
             </div>
-            {{range .Feeds}}
-            <div class="feed-item px-4 py-3 border-b border-stone-50 hover:bg-stone-50 transition-colors {{if eq $.FeedID (printf "%d" .ID)}}bg-amber-50{{end}}">
-              <a href="/?feed_id={{.ID}}" class="block"
-                 hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
-                 hx-indicator="#loading">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm font-medium text-stone-800 truncate">{{.Title}}</span>
-                  {{if gt .UnreadCount 0}}
-                  <span class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold text-amber-800 bg-amber-100 rounded-full">{{.UnreadCount}}</span>
-                  {{end}}
-                </div>
-              </a>
-              <div class="flex items-center gap-2 mt-1">
-                <button hx-post="/feeds/{{.ID}}/refresh" hx-target="#article-list" hx-indicator="#loading"
-                  class="text-xs text-stone-400 hover:text-amber-600 transition-colors" title="Refresh">
-                  ↻
-                </button>
-                <button hx-delete="/feeds/{{.ID}}" hx-target="closest .feed-item" hx-swap="outerHTML swap:0.3s"
-                  hx-confirm="Remove this feed?" class="text-xs text-stone-400 hover:text-red-500 transition-colors" title="Remove">
-                  ✕
-                </button>
+          </div>
+          {{else}}
+          <div class="empty">
+            <p class="empty__t">No feeds yet</p>
+            <p class="empty__s">Add one below</p>
+          </div>
+          {{end}}
+          <div class="add-feed">
+            <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
+              <input type="url" name="url" placeholder="RSS / Atom URL" required class="input">
+              <button type="submit" class="btn btn--primary btn--mini">Add</button>
+            </form>
+          </div>
+          <div class="add-feed add-feed--opml">
+            <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data">
+              <label class="label-mono">Import OPML</label>
+              <div class="flex gap-2">
+                <input type="file" name="opml_file" accept=".opml,.xml" required class="file">
+                <button type="submit" class="btn btn--ghost btn--mini">Import</button>
               </div>
-            </div>
-            {{else}}
-            <div class="p-6 text-center text-stone-400">
-              <p class="text-sm">No feeds yet</p>
-              <p class="text-xs mt-1">Add one below</p>
-            </div>
-            {{end}}
-            <div class="p-4 border-b border-stone-100">
-              <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
-                <input type="url" name="url" placeholder="RSS/Atom URL" required
-                  class="flex-1 px-3 py-1.5 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
-                <button type="submit"
-                  class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
-                  Add
-                </button>
-              </form>
-            </div>
-            <div class="p-4">
-              <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data" class="flex flex-col gap-2">
-                <label class="block text-xs text-stone-500 font-medium">Import OPML</label>
-                <div class="flex gap-2">
-                  <input type="file" name="opml_file" accept=".opml,.xml" required
-                    class="flex-1 text-sm text-stone-600 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100">
-                  <button type="submit"
-                    class="px-3 py-1.5 bg-stone-500 hover:bg-stone-600 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
-                    Import
-                  </button>
-                </div>
-              </form>
-            </div>
+            </form>
           </div>
         </div>
-      </aside>
+      </div>
+    </aside>
 
-      <!-- Main: Article List -->
-      <section id="article-list" class="flex-1 min-w-0">
-        <div id="loading" class="htmx-indicator text-center py-4 text-stone-400 text-sm">Loading...</div>
-        {{range .Articles}}
-        <div class="article-card bg-white rounded-xl shadow-sm border border-stone-200 p-4 mb-3 {{if not .IsRead}}border-l-4 border-l-amber-500{{else}}opacity-75{{end}}">
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex-1 min-w-0">
-              <h3 class="text-base font-semibold {{if not .IsRead}}text-stone-900{{else}}text-stone-500{{end}} truncate">
-                {{if .URL}}<a href="{{deref .URL}}" target="_blank" rel="noopener noreferrer" class="hover:text-amber-700 transition-colors">{{.Title}}</a>{{else}}{{.Title}}{{end}}
-              </h3>
-              {{if .Author}}<p class="text-xs text-stone-400 mt-0.5">{{deref .Author}}</p>{{end}}
-              {{if .Summary}}<p class="text-sm text-stone-600 mt-2 line-clamp-3">{{deref .Summary}}</p>{{end}}
-            </div>
-            <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .article-card" hx-swap="outerHTML"
-              class="flex-shrink-0 p-1.5 rounded-full {{if not .IsRead}}text-amber-500 hover:text-amber-700{{else}}text-stone-300 hover:text-stone-500{{end}} transition-colors"
-              title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}">
-              {{if not .IsRead}}●{{else}}○{{end}}
-            </button>
-          </div>
+    <section id="article-list" class="stream">
+      <div id="loading" class="htmx-indicator loading">Checking pens...</div>
+      {{range .Articles}}
+      <div class="card{{if not .IsRead}} is-unread{{end}}{{if .IsRead}} is-read{{end}}" data-article-id="{{.ID}}" data-feed-id="{{.FeedID}}">
+        <div class="card__main">
+          <h3 class="card__title">
+            {{if .URL}}<a href="{{deref .URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>{{else}}{{.Title}}{{end}}
+          </h3>
+          <p class="card__meta">
+            {{if .Author}}<span>{{deref .Author}}</span>{{end}}
+            {{if .PublishedAt}}<span>{{timeAgo .PublishedAt}}</span>{{end}}
+            <span class="card__pen">#{{.FeedID}}</span>
+          </p>
+          {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
         </div>
-        {{else}}
-        <div class="text-center py-12">
-          <p class="text-stone-400 text-lg">No articles yet</p>
-          <p class="text-stone-300 text-sm mt-1">Add a feed or refresh existing ones</p>
-        </div>
-        {{end}}
-      </section>
-    </div>
+        <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
+          class="card__read" title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}"
+          data-read="{{.IsRead}}">
+          {{if not .IsRead}}●{{else}}○{{end}}
+        </button>
+      </div>
+      {{else}}
+      <div class="empty">
+        <div class="empty__mark">🐄</div>
+        <p class="empty__t">No articles yet</p>
+        <p class="empty__s">Add a feed or refresh existing ones</p>
+      </div>
+      {{end}}
+    </section>
   </main>
 </body>
-</html>`
+</html>
+`
 
-const feedListTemplate = `<div class="bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden">
-  <div class="p-4 border-b border-stone-100">
-    <h2 class="text-sm font-semibold text-stone-500 uppercase tracking-wider">Feeds</h2>
-  </div>
+const feedListTemplate = `
+<div class="panel">
+  <div class="panel__head"><span class="panel__title"><b>≡</b> Pen</span></div>
   {{range .Feeds}}
-  <div class="feed-item px-4 py-3 border-b border-stone-50 hover:bg-stone-50 transition-colors">
-    <a href="/?feed_id={{.ID}}" class="block"
+  <div class="feed" data-feed-id="{{.ID}}">
+    <a href="/?feed_id={{.ID}}" class="feed__row"
        hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
        hx-indicator="#loading">
-      <div class="flex items-center justify-between">
-        <span class="text-sm font-medium text-stone-800 truncate">{{.Title}}</span>
-        {{if gt .UnreadCount 0}}
-        <span class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold text-amber-800 bg-amber-100 rounded-full">{{.UnreadCount}}</span>
-        {{end}}
-      </div>
+      <span class="feed__title">{{.Title}}</span>
+      {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
     </a>
-    <div class="flex items-center gap-2 mt-1">
-      <button hx-post="/feeds/{{.ID}}/refresh" hx-target="#article-list" hx-indicator="#loading"
-        class="text-xs text-stone-400 hover:text-amber-600 transition-colors" title="Refresh">
-        ↻
-      </button>
-      <button hx-delete="/feeds/{{.ID}}" hx-target="closest .feed-item" hx-swap="outerHTML swap:0.3s"
-        hx-confirm="Remove this feed?" class="text-xs text-stone-400 hover:text-red-500 transition-colors" title="Remove">
-        ✕
-      </button>
+    <div class="feed__tools">
+      <button hx-post="/feeds/{{.ID}}/refresh" hx-target="#article-list" hx-indicator="#loading" class="tool" title="Refresh">↻</button>
+      <button hx-delete="/feeds/{{.ID}}" hx-target="closest .feed" hx-swap="outerHTML swap:0.3s"
+        hx-confirm="Remove this feed?" class="tool tool--del" title="Remove">✕</button>
     </div>
   </div>
   {{else}}
-  <div class="p-6 text-center text-stone-400">
-    <p class="text-sm">No feeds yet</p>
-    <p class="text-xs mt-1">Add one below</p>
+  <div class="empty">
+    <p class="empty__t">No feeds yet</p>
+    <p class="empty__s">Add one below</p>
   </div>
   {{end}}
-  <div class="p-4 border-b border-stone-100">
+  <div class="add-feed">
     <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
-      <input type="url" name="url" placeholder="RSS/Atom URL" required
-        class="flex-1 px-3 py-1.5 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
-      <button type="submit"
-        class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
-        Add
-      </button>
+      <input type="url" name="url" placeholder="RSS / Atom URL" required class="input">
+      <button type="submit" class="btn btn--primary btn--mini">Add</button>
     </form>
   </div>
-  <div class="p-4">
-    <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data" class="flex flex-col gap-2">
-      <label class="block text-xs text-stone-500 font-medium">Import OPML</label>
+  <div class="add-feed add-feed--opml">
+    <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data">
+      <label class="label-mono">Import OPML</label>
       <div class="flex gap-2">
-        <input type="file" name="opml_file" accept=".opml,.xml" required
-          class="flex-1 text-sm text-stone-600 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100">
-        <button type="submit"
-          class="px-3 py-1.5 bg-stone-500 hover:bg-stone-600 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
-          Import
-        </button>
+        <input type="file" name="opml_file" accept=".opml,.xml" required class="file">
+        <button type="submit" class="btn btn--ghost btn--mini">Import</button>
       </div>
     </form>
   </div>
-</div>`
+</div>
+`
 
-const articleListTemplate = `{{range .Articles}}
-<div class="article-card bg-white rounded-xl shadow-sm border border-stone-200 p-4 mb-3 {{if not .IsRead}}border-l-4 border-l-amber-500{{else}}opacity-75{{end}}">
-  <div class="flex items-start justify-between gap-3">
-    <div class="flex-1 min-w-0">
-      <h3 class="text-base font-semibold {{if not .IsRead}}text-stone-900{{else}}text-stone-500{{end}} truncate">
-        {{if .URL}}<a href="{{deref .URL}}" target="_blank" rel="noopener noreferrer" class="hover:text-amber-700 transition-colors">{{.Title}}</a>{{else}}{{.Title}}{{end}}
-      </h3>
-      {{if .Author}}<p class="text-xs text-stone-400 mt-0.5">{{deref .Author}}</p>{{end}}
-      {{if .Summary}}<p class="text-sm text-stone-600 mt-2 line-clamp-3">{{deref .Summary}}</p>{{end}}
-    </div>
-    <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .article-card" hx-swap="outerHTML"
-      class="flex-shrink-0 p-1.5 rounded-full {{if not .IsRead}}text-amber-500 hover:text-amber-700{{else}}text-stone-300 hover:text-stone-500{{end}} transition-colors"
-      title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}">
-      {{if not .IsRead}}●{{else}}○{{end}}
-    </button>
+const articleListTemplate = `
+{{range .Articles}}
+<div class="card{{if not .IsRead}} is-unread{{end}}{{if .IsRead}} is-read{{end}}" data-article-id="{{.ID}}" data-feed-id="{{.FeedID}}">
+  <div class="card__main">
+    <h3 class="card__title">
+      {{if .URL}}<a href="{{deref .URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>{{else}}{{.Title}}{{end}}
+    </h3>
+    <p class="card__meta">
+      {{if .Author}}<span>{{deref .Author}}</span>{{end}}
+      <span class="card__pen">#{{.FeedID}}</span>
+    </p>
+    {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
   </div>
+  <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
+    class="card__read" title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}"
+    data-read="{{.IsRead}}">
+    {{if not .IsRead}}●{{else}}○{{end}}
+  </button>
 </div>
 {{else}}
-<div class="text-center py-12">
-  <p class="text-stone-400 text-lg">No articles yet</p>
-  <p class="text-stone-300 text-sm mt-1">Add a feed or refresh existing ones</p>
+<div class="empty">
+  <div class="empty__mark">🐄</div>
+  <p class="empty__t">No articles yet</p>
+  <p class="empty__s">Add a feed or refresh existing ones</p>
 </div>
-{{end}}`
+{{end}}
+`

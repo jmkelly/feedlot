@@ -1,0 +1,11 @@
+{
+  "timestamp": 1784346664804,
+  "sessionId": "_home_james__pi_agent_sessions_--home-james-feedlot--_2026-07-16T11-43-31-941Z_019f6abd-3265-7e6c-9be8-33815d2f5ccb_jsonl",
+  "metrics": {
+    "constraintViolations": 0,
+    "traceCompleteness": 0.9099099099099099,
+    "toolJustificationRate": 0.6036036036036037,
+    "recoveryEfficiency": 0.999918087971379,
+    "regressionFreeRate": 0
+  }
+}

@@ -30,6 +30,13 @@ type Feed struct {
 	UnreadCount   int        `db:"unread_count" json:"unread_count,omitempty"`
 }
 
+type LogEntry struct {
+	ID        int64     `db:"id" json:"id"`
+	Level     string    `db:"level" json:"level"`
+	Message   string    `db:"message" json:"message"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
 type Article struct {
 	ID          int64      `db:"id" json:"id"`
 	FeedID      int64      `db:"feed_id" json:"feed_id"`

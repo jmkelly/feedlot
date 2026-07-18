@@ -1,0 +1,232 @@
+- generic [active] [ref=f2e1]:
+  - navigation [ref=f2e19]:
+    - generic [ref=f2e20]:
+      - generic [ref=f2e21]: 🐄
+      - generic [ref=f2e22]: Feedlot
+      - generic [ref=f2e23]: Field Station
+    - generic [ref=f2e24]:
+      - button "Toggle light/dark theme" [ref=f2e25] [cursor=pointer]: ☾
+      - button "Auto-read" [pressed] [ref=f2e26] [cursor=pointer]
+      - button "Mark read" [ref=f2e28] [cursor=pointer]
+      - link "Settings" [ref=f2e29] [cursor=pointer]:
+        - /url: /settings
+      - button "Log out" [ref=f2e31] [cursor=pointer]
+  - main [ref=f2e32]:
+    - complementary [ref=f2e33]:
+      - generic [ref=f2e36]:
+        - generic [ref=f2e38]:
+          - generic [ref=f2e39]: ≡
+          - text: Pen
+        - 'link "Hacker News: Front Page 20" [ref=f2e41] [cursor=pointer]':
+          - /url: /?feed_id=1
+          - generic [ref=f2e42]: "Hacker News: Front Page"
+          - generic [ref=f2e43]: "20"
+        - generic [ref=f2e45]:
+          - textbox "RSS / Atom URL" [ref=f2e46]
+          - button "Add" [ref=f2e47] [cursor=pointer]
+        - generic [ref=f2e49]:
+          - generic [ref=f2e50]: Import OPML
+          - generic [ref=f2e51]:
+            - button "Choose File" [ref=f2e52]
+            - button "Import" [ref=f2e53] [cursor=pointer]
+    - generic [ref=f2e54]:
+      - generic [ref=f2e55]:
+        - generic [ref=f2e56]:
+          - heading [level=3] [ref=f2e57]:
+            - link "Zig Creator Calls Spade a Spade, Anthropic Blows Smoke" [ref=f2e58] [cursor=pointer]:
+              - /url: https://raymyers.org/post/zed-creator-calls-spade-a-spade/
+          - paragraph [ref=f2e59]:
+            - generic [ref=f2e60]: crowdhailer
+            - generic [ref=f2e61]: ·recently
+            - generic [ref=f2e62]: ·#1
+        - button "●" [ref=f2e63] [cursor=pointer]
+      - generic [ref=f2e64]:
+        - generic [ref=f2e65]:
+          - heading [level=3] [ref=f2e66]:
+            - link "Berkshire's $397B Bet Against an Overheated Market" [ref=f2e67] [cursor=pointer]:
+              - /url: https://www.disruptionbanking.com/2026/07/13/inside-berkshires-397-billion-bet-against-an-overheated-market/
+          - paragraph [ref=f2e68]:
+            - generic [ref=f2e69]: emsidisii
+            - generic [ref=f2e70]: ·recently
+            - generic [ref=f2e71]: ·#1
+        - button "●" [ref=f2e72] [cursor=pointer]
+      - generic [ref=f2e73]:
+        - generic [ref=f2e74]:
+          - heading [level=3] [ref=f2e75]:
+            - 'link "Interrail: 6,379Km and 13 Countries over 7 weeks" [ref=f2e76] [cursor=pointer]':
+              - /url: https://shkspr.mobi/blog/2026/07/another-ridiculous-interrail-holiday-6379km-and-13-countries-over-7-weeks/
+          - paragraph [ref=f2e77]:
+            - generic [ref=f2e78]: coinfused
+            - generic [ref=f2e79]: ·recently
+            - generic [ref=f2e80]: ·#1
+        - button "●" [ref=f2e81] [cursor=pointer]
+      - generic [ref=f2e82]:
+        - generic [ref=f2e83]:
+          - heading [level=3] [ref=f2e84]:
+            - link "Quadrupling code performance with a \"useless\" if" [ref=f2e85] [cursor=pointer]:
+              - /url: https://purplesyringa.moe/blog/quadrupling-code-performance-with-a-useless-if/
+          - paragraph [ref=f2e86]:
+            - generic [ref=f2e87]: birdculture
+            - generic [ref=f2e88]: ·recently
+            - generic [ref=f2e89]: ·#1
+        - button "●" [ref=f2e90] [cursor=pointer]
+      - generic [ref=f2e91]:
+        - generic [ref=f2e92]:
+          - heading [level=3] [ref=f2e93]:
+            - link "Backtrack-Free Cursive" [ref=f2e94] [cursor=pointer]:
+              - /url: https://mmapped.blog/posts/52-backtrack-free-cursive
+          - paragraph [ref=f2e95]:
+            - generic [ref=f2e96]: dmit
+            - generic [ref=f2e97]: ·recently
+            - generic [ref=f2e98]: ·#1
+        - button "●" [ref=f2e99] [cursor=pointer]
+      - generic [ref=f2e100]:
+        - generic [ref=f2e101]:
+          - heading [level=3] [ref=f2e102]:
+            - link "Sam Neill has died" [ref=f2e103] [cursor=pointer]:
+              - /url: https://www.theguardian.com/film/2026/jul/13/sam-neill-death-actor-dies-aged-78
+          - paragraph [ref=f2e104]:
+            - generic [ref=f2e105]: j4mie
+            - generic [ref=f2e106]: ·recently
+            - generic [ref=f2e107]: ·#1
+        - button "●" [ref=f2e108] [cursor=pointer]
+      - generic [ref=f2e109]:
+        - generic [ref=f2e110]:
+          - heading [level=3] [ref=f2e111]:
+            - link "The Graph That Should Be Front-Page News" [ref=f2e112] [cursor=pointer]:
+              - /url: https://www.lyrebirddreaming.com/post/the-graph-that-should-be-front-page-news
+          - paragraph [ref=f2e113]:
+            - generic [ref=f2e114]: rakel_rakel
+            - generic [ref=f2e115]: ·recently
+            - generic [ref=f2e116]: ·#1
+        - button "●" [ref=f2e117] [cursor=pointer]
+      - generic [ref=f2e118]:
+        - generic [ref=f2e119]:
+          - heading [level=3] [ref=f2e120]:
+            - link "Beavis Ultrasound PnP ISA Sound Card Replica" [ref=f2e121] [cursor=pointer]:
+              - /url: https://github.com/schlae/BeavisUltrasound
+          - paragraph [ref=f2e122]:
+            - generic [ref=f2e123]: mariuz
+            - generic [ref=f2e124]: ·recently
+            - generic [ref=f2e125]: ·#1
+        - button "●" [ref=f2e126] [cursor=pointer]
+      - generic [ref=f2e127]:
+        - generic [ref=f2e128]:
+          - heading [level=3] [ref=f2e129]:
+            - 'link "Ask HN: Add flag for AI-generated articles" [ref=f2e130] [cursor=pointer]':
+              - /url: https://news.ycombinator.com/item?id=48886741
+          - paragraph [ref=f2e131]:
+            - generic [ref=f2e132]: levkk
+            - generic [ref=f2e133]: ·recently
+            - generic [ref=f2e134]: ·#1
+        - button "●" [ref=f2e135] [cursor=pointer]
+      - generic [ref=f2e136]:
+        - generic [ref=f2e137]:
+          - heading [level=3] [ref=f2e138]:
+            - link "Designing and assembling my first PCB" [ref=f2e139] [cursor=pointer]:
+              - /url: https://vilkeliskis.com/b/2026/0711.html
+          - paragraph [ref=f2e140]:
+            - generic [ref=f2e141]: tadasv
+            - generic [ref=f2e142]: ·recently
+            - generic [ref=f2e143]: ·#1
+        - button "●" [ref=f2e144] [cursor=pointer]
+      - generic [ref=f2e145]:
+        - generic [ref=f2e146]:
+          - heading [level=3] [ref=f2e147]:
+            - link "Cyberpunk Comics, Manga and Graphic Novels" [ref=f2e148] [cursor=pointer]:
+              - /url: https://shellzine.net/cyberpunk-comics/
+          - paragraph [ref=f2e149]:
+            - generic [ref=f2e150]: zdw
+            - generic [ref=f2e151]: ·recently
+            - generic [ref=f2e152]: ·#1
+        - button "●" [ref=f2e153] [cursor=pointer]
+      - generic [ref=f2e154]:
+        - generic [ref=f2e155]:
+          - heading [level=3] [ref=f2e156]:
+            - link "Kode Dot Programmable pocket device for makers, pentesters and geeks" [ref=f2e157] [cursor=pointer]:
+              - /url: https://kode.diy
+          - paragraph [ref=f2e158]:
+            - generic [ref=f2e159]: iNic
+            - generic [ref=f2e160]: ·recently
+            - generic [ref=f2e161]: ·#1
+        - button "●" [ref=f2e162] [cursor=pointer]
+      - generic [ref=f2e163]:
+        - generic [ref=f2e164]:
+          - heading [level=3] [ref=f2e165]:
+            - 'link "Ask HN: What Are You Working On? (July 2026)" [ref=f2e166] [cursor=pointer]':
+              - /url: https://news.ycombinator.com/item?id=48884984
+          - paragraph [ref=f2e167]:
+            - generic [ref=f2e168]: david927
+            - generic [ref=f2e169]: ·recently
+            - generic [ref=f2e170]: ·#1
+        - button "●" [ref=f2e171] [cursor=pointer]
+      - generic [ref=f2e172]:
+        - generic [ref=f2e173]:
+          - heading [level=3] [ref=f2e174]:
+            - link "Tiny Emulators" [ref=f2e175] [cursor=pointer]:
+              - /url: https://floooh.github.io/tiny8bit-preview/index.html
+          - paragraph [ref=f2e176]:
+            - generic [ref=f2e177]: naves
+            - generic [ref=f2e178]: ·recently
+            - generic [ref=f2e179]: ·#1
+        - button "●" [ref=f2e180] [cursor=pointer]
+      - generic [ref=f2e181]:
+        - generic [ref=f2e182]:
+          - heading [level=3] [ref=f2e183]:
+            - link "Claude Code sends 33k tokens before reading the prompt; OpenCode sends 7k" [ref=f2e184] [cursor=pointer]:
+              - /url: https://systima.ai/blog/claude-code-vs-opencode-token-overhead
+          - paragraph [ref=f2e185]:
+            - generic [ref=f2e186]: systima
+            - generic [ref=f2e187]: ·recently
+            - generic [ref=f2e188]: ·#1
+        - button "●" [ref=f2e189] [cursor=pointer]
+      - generic [ref=f2e190]:
+        - generic [ref=f2e191]:
+          - heading [level=3] [ref=f2e192]:
+            - link "I Learned to Read Again" [ref=f2e193] [cursor=pointer]:
+              - /url: https://substack.magazinenongrata.com/p/how-i-learned-to-read-again
+          - paragraph [ref=f2e194]:
+            - generic [ref=f2e195]: georgex7
+            - generic [ref=f2e196]: ·recently
+            - generic [ref=f2e197]: ·#1
+        - button "●" [ref=f2e198] [cursor=pointer]
+      - generic [ref=f2e199]:
+        - generic [ref=f2e200]:
+          - heading [level=3] [ref=f2e201]:
+            - 'link "Migrating a production AI agent to GPT-5.6: 2.2x faster, 27% cheaper" [ref=f2e202] [cursor=pointer]':
+              - /url: https://ploy.ai/blog/migrating-a-production-ai-agent-to-gpt-5-6
+          - paragraph [ref=f2e203]:
+            - generic [ref=f2e204]: brryant
+            - generic [ref=f2e205]: ·recently
+            - generic [ref=f2e206]: ·#1
+        - button "●" [ref=f2e207] [cursor=pointer]
+      - generic [ref=f2e208]:
+        - generic [ref=f2e209]:
+          - heading [level=3] [ref=f2e210]:
+            - link "LARP – Revenue infrastructure for serious founders" [ref=f2e211] [cursor=pointer]:
+              - /url: https://www.larp.website/
+          - paragraph [ref=f2e212]:
+            - generic [ref=f2e213]: BerislavLopac
+            - generic [ref=f2e214]: ·recently
+            - generic [ref=f2e215]: ·#1
+        - button "●" [ref=f2e216] [cursor=pointer]
+      - generic [ref=f2e217]:
+        - generic [ref=f2e218]:
+          - heading [level=3] [ref=f2e219]:
+            - link "How to read more books" [ref=f2e220] [cursor=pointer]:
+              - /url: https://scotto.me/blog/2026-07-12-how-to-read-more-books/
+          - paragraph [ref=f2e221]:
+            - generic [ref=f2e222]: silcoon
+            - generic [ref=f2e223]: ·recently
+            - generic [ref=f2e224]: ·#1
+        - button "●" [ref=f2e225] [cursor=pointer]
+      - generic [ref=f2e226]:
+        - generic [ref=f2e227]:
+          - heading [level=3] [ref=f2e228]:
+            - link "How we can reduce traffic congestion" [ref=f2e229] [cursor=pointer]:
+              - /url: https://research.google/blog/the-power-of-collaboration-how-we-can-reduce-traffic-congestion/
+          - paragraph [ref=f2e230]:
+            - generic [ref=f2e231]: raahelb
+            - generic [ref=f2e232]: ·recently
+            - generic [ref=f2e233]: ·#1
+        - button "●" [ref=f2e234] [cursor=pointer]

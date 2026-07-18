@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -54,8 +55,35 @@ type openaiChoice struct {
 	Message openaiMessage `json:"message"`
 }
 
+type openaiMessageFull struct {
+	Role             string `json:"role"`
+	Content          string `json:"content"`
+	ReasoningContent string `json:"reasoning_content"`
+}
+
+type openaiChoiceFull struct {
+	Message openaiMessageFull `json:"message"`
+}
+
+type openaiResponseFull struct {
+	Choices []openaiChoiceFull `json:"choices"`
+}
+
 type openaiResponse struct {
 	Choices []openaiChoice `json:"choices"`
+}
+
+func (s *Summarizer) TestConnection(req SummaryRequest) error {
+	req.ArticleText = "Respond with only the word OK."
+	req.Length = "short"
+	summary, err := s.Summarize(req)
+	if err != nil {
+		return err
+	}
+	if summary == "" {
+		return fmt.Errorf("empty response from API")
+	}
+	return nil
 }
 
 func (s *Summarizer) Summarize(req SummaryRequest) (string, error) {
@@ -70,12 +98,12 @@ func (s *Summarizer) Summarize(req SummaryRequest) (string, error) {
 	}
 
 	// Determine max tokens based on length setting
-	maxTokens := 150
+	maxTokens := 1000
 	switch req.Length {
 	case "medium":
-		maxTokens = 300
+		maxTokens = 2000
 	case "long":
-		maxTokens = 500
+		maxTokens = 4000
 	}
 
 	// Build prompt
@@ -89,7 +117,7 @@ func (s *Summarizer) Summarize(req SummaryRequest) (string, error) {
 
 	// Route to provider
 	switch strings.ToLower(req.Provider) {
-	case "openai", "custom":
+	case "openai", "custom", "opencode-go":
 		return s.callOpenAICompatible(req, systemPrompt, userPrompt, maxTokens)
 	case "anthropic":
 		return s.callAnthropic(req, systemPrompt, userPrompt, maxTokens)
@@ -103,7 +131,11 @@ func (s *Summarizer) Summarize(req SummaryRequest) (string, error) {
 func (s *Summarizer) callOpenAICompatible(req SummaryRequest, systemPrompt, userPrompt string, maxTokens int) (string, error) {
 	baseURL := strings.TrimRight(req.BaseURL, "/")
 	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1"
+		if req.Provider == "opencode-go" {
+			baseURL = "https://opencode.ai/zen/go/v1"
+		} else {
+			baseURL = "https://api.openai.com/v1"
+		}
 	}
 
 	apiReq := openaiRequest{
@@ -121,19 +153,21 @@ func (s *Summarizer) callOpenAICompatible(req SummaryRequest, systemPrompt, user
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if req.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+req.APIKey)
-	}
+	url := baseURL + "/chat/completions"
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
 			time.Sleep(time.Duration(attempt*2) * time.Second)
+		}
+
+		httpReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
+		if err != nil {
+			return "", fmt.Errorf("create request: %w", err)
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		if req.APIKey != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+req.APIKey)
 		}
 
 		resp, err := s.client.Do(httpReq)
@@ -154,24 +188,40 @@ func (s *Summarizer) callOpenAICompatible(req SummaryRequest, systemPrompt, user
 			continue
 		}
 
+		// Try standard response first, then full struct for reasoning models
 		var apiResp openaiResponse
 		if err := json.Unmarshal(respBody, &apiResp); err != nil {
 			lastErr = fmt.Errorf("unmarshal response: %w", err)
 			continue
 		}
 
-		if len(apiResp.Choices) == 0 {
-			lastErr = fmt.Errorf("no choices in response")
+		if len(apiResp.Choices) > 0 {
+			summary := strings.TrimSpace(apiResp.Choices[0].Message.Content)
+			if summary != "" {
+				return summary, nil
+			}
+		}
+
+		// Reasoning models may put content in reasoning_content
+		var apiRespFull openaiResponseFull
+		if err := json.Unmarshal(respBody, &apiRespFull); err != nil {
+			lastErr = fmt.Errorf("unmarshal response: %w", err)
 			continue
 		}
 
-		summary := strings.TrimSpace(apiResp.Choices[0].Message.Content)
-		if summary == "" {
-			lastErr = fmt.Errorf("empty summary")
-			continue
+		if len(apiRespFull.Choices) > 0 {
+			summary := strings.TrimSpace(apiRespFull.Choices[0].Message.Content)
+			if summary != "" {
+				return summary, nil
+			}
+			reasoning := strings.TrimSpace(apiRespFull.Choices[0].Message.ReasoningContent)
+			if reasoning != "" {
+				return reasoning, nil
+			}
 		}
 
-		return summary, nil
+		lastErr = fmt.Errorf("empty summary")
+		continue
 	}
 
 	return "", fmt.Errorf("summarization failed after %d retries: %w", maxRetries, lastErr)
@@ -252,6 +302,161 @@ func (s *Summarizer) callAnthropic(req SummaryRequest, systemPrompt, userPrompt 
 	}
 
 	return strings.TrimSpace(apiResp.Content[0].Text), nil
+}
+
+type openAIModel struct {
+	ID string `json:"id"`
+}
+
+type openAIModelsResponse struct {
+	Data []openAIModel `json:"data"`
+}
+
+type ollamaTagModel struct {
+	Name string `json:"name"`
+}
+
+type ollamaTagsResponse struct {
+	Models []ollamaTagModel `json:"models"`
+}
+
+func (s *Summarizer) ListModels(req SummaryRequest) ([]string, error) {
+	switch strings.ToLower(req.Provider) {
+	case "openai", "custom", "opencode-go":
+		return s.listOpenAIModels(req)
+	case "anthropic":
+		return s.listAnthropicModels(req)
+	case "ollama":
+		return s.listOllamaModels(req)
+	default:
+		return nil, fmt.Errorf("unsupported provider for model listing")
+	}
+}
+
+func (s *Summarizer) listOpenAIModels(req SummaryRequest) ([]string, error) {
+	baseURL := strings.TrimRight(req.BaseURL, "/")
+	if baseURL == "" {
+		if req.Provider == "opencode-go" {
+			baseURL = "https://opencode.ai/zen/go/v1"
+		} else {
+			baseURL = "https://api.openai.com/v1"
+		}
+	}
+
+	httpReq, err := http.NewRequest("GET", baseURL+"/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	if req.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+req.APIKey)
+	}
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("http request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var apiResp openAIModelsResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	var models []string
+	for _, m := range apiResp.Data {
+		models = append(models, m.ID)
+	}
+	sort.Strings(models)
+	return models, nil
+}
+
+func (s *Summarizer) listAnthropicModels(req SummaryRequest) ([]string, error) {
+	baseURL := strings.TrimRight(req.BaseURL, "/")
+	if baseURL == "" {
+		baseURL = "https://api.anthropic.com/v1"
+	}
+
+	httpReq, err := http.NewRequest("GET", baseURL+"/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("x-api-key", req.APIKey)
+	httpReq.Header.Set("anthropic-version", "2023-06-01")
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("http request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Anthropic API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var apiResp openAIModelsResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	var models []string
+	for _, m := range apiResp.Data {
+		models = append(models, m.ID)
+	}
+	sort.Strings(models)
+	return models, nil
+}
+
+func (s *Summarizer) listOllamaModels(req SummaryRequest) ([]string, error) {
+	baseURL := strings.TrimRight(req.BaseURL, "/")
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
+
+	httpReq, err := http.NewRequest("GET", baseURL+"/api/tags", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("http request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var apiResp ollamaTagsResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	var models []string
+	for _, m := range apiResp.Models {
+		models = append(models, m.Name)
+	}
+	sort.Strings(models)
+	return models, nil
 }
 
 type ollamaRequest struct {

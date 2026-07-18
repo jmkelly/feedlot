@@ -1,0 +1,18 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]: 🐄
+    - heading "Feedlot" [level=1] [ref=e5]
+    - paragraph [ref=e6]: Chew through your feeds, one article at a time.
+  - generic [ref=e8]:
+    - heading "Sign in" [level=2] [ref=e9]
+    - generic [ref=e10]:
+      - text: Email
+      - textbox "Email" [active] [ref=e11]
+    - generic [ref=e12]:
+      - text: Password
+      - textbox "Password" [ref=e13]
+    - button "Sign in" [ref=e14]
+    - paragraph [ref=e15]:
+      - text: Don't have an account?
+      - link "Register" [ref=e16] [cursor=pointer]:
+        - /url: /register

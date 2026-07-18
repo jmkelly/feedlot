@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.1">
+  <head>
+    <title>The Old Reader</title>
+    <dateCreated>Sat, 18 Jul 2026 06:52:09 GMT</dateCreated>
+    <dateModified>Sat, 18 Jul 2026 06:52:09 GMT</dateModified>
+    <ownerName>James.kelly.99</ownerName>
+    <ownerEmail>james.kelly.99@gmail.com</ownerEmail>
+  </head>
+  <body>
+    <outline type="rss" xmlUrl="http://planet.postgresql.org/rss20.xml"/>
+    <outline type="rss" xmlUrl="https://diabetogenic.wordpress.com/feed/"/>
+    <outline type="rss" xmlUrl="https://bittersweetdiagnosis.com/feed/"/>
+    <outline type="rss" xmlUrl="https://aws.amazon.com/blogs/aws/feed/"/>
+    <outline type="rss" xmlUrl="https://bair.berkeley.edu/blog/feed.xml"/>
+    <outline type="rss" xmlUrl="https://www.marktechpost.com/feed/"/>
+    <outline title="Security" text="Security">
+      <outline type="rss" xmlUrl="http://googleonlinesecurity.blogspot.com/feeds/posts/default"/>
+      <outline type="rss" xmlUrl="http://www.troyhunt.com/feeds/posts/default"/>
+    </outline>
+    <outline title="Javascript" text="Javascript">
+      <outline type="rss" xmlUrl="http://blog.alexmaccaw.com/feed"/>
+      <outline type="rss" xmlUrl="http://feeds.nczonline.net/blog/"/>
+    </outline>
+    <outline title="Distributed" text="Distributed">
+      <outline type="rss" xmlUrl="http://aphyr.com/posts.atom"/>
+      <outline type="rss" xmlUrl="http://whilefalse.blogspot.com/feeds/posts/default"/>
+      <outline type="rss" xmlUrl="http://geteventstore.com/blog/feed/"/>
+    </outline>
+    <outline title=".NET" text=".NET">
+      <outline type="rss" xmlUrl="http://feeds.feedburner.com/AyendeRahien"/>
+      <outline type="rss" xmlUrl="http://feeds.feedburner.com/codinghorror/"/>
+      <outline type="rss" xmlUrl="http://feeds.feedburner.com/JonSkeetCodingBlog"/>
+      <outline type="rss" xmlUrl="http://tirania.org/blog/miguel.rss2"/>
+      <outline type="rss" xmlUrl="http://mookid.dk/oncode/feed"/>
+      <outline type="rss" xmlUrl="http://blog.ploeh.dk/SyndicationService.asmx/GetRss"/>
+      <outline type="rss" xmlUrl="https://aws.amazon.com/blogs/developer/category/net/feed/"/>
+      <outline type="rss" xmlUrl="http://feeds.feedburner.com/ScottHanselman"/>
+      <outline type="rss" xmlUrl="http://blog.tatham.oddie.com.au/feed/"/>
+      <outline type="rss" xmlUrl="http://feeds.feedburner.com/ReflectivePerspective"/>
+      <outline type="rss" xmlUrl="https://davidpallmann.hashnode.dev/rss.xml"/>
+    </outline>
+    <outline title="Ruby" text="Ruby">
+      <outline type="rss" xmlUrl="http://yehudakatz.com/feed/"/>
+      <outline type="rss" xmlUrl="http://feeds.feedburner.com/wekeroad/EeKc"/>
+    </outline>
+    <outline title="GIS" text="GIS">
+      <outline type="rss" xmlUrl="http://www.bostongis.com/blog/index.php?/feeds/index.rss2"/>
+      <outline type="rss" xmlUrl="http://leafletjs.com/atom.xml"/>
+      <outline type="rss" xmlUrl="https://www.blogger.com/feeds/2893633529075801218/posts/default"/>
+      <outline type="rss" xmlUrl="http://blog.cleverelephant.ca/feeds/posts/default?alt=rss"/>
+      <outline type="rss" xmlUrl="http://postgis.net/feed.xml"/>
+      <outline type="rss" xmlUrl="http://north-road.com/feed/"/>
+      <outline type="rss" xmlUrl="http://petewarden.com/feed/"/>
+      <outline type="rss" xmlUrl="http://smathermather.wordpress.com/feed/"/>
+      <outline type="rss" xmlUrl="http://sharpgis.net/syndication.axd"/>
+      <outline type="rss" xmlUrl="http://spatialdbadvisor.com/atom"/>
+      <outline type="rss" xmlUrl="http://crschmidt.net/blog/feed/"/>
+      <outline type="rss" xmlUrl="https://www.blogger.com/feeds/1951542926024108564/posts/default"/>
+    </outline>
+  </body>
+</opml>
+

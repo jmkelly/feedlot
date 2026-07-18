@@ -1,0 +1,13 @@
+{
+  "sessionId": "session-1784287228509",
+  "timestamp": 1784287228509,
+  "totalToolCalls": 20,
+  "totalErrors": 1,
+  "totalValidations": 1,
+  "passedValidations": 1,
+  "budgetUtilizedPercent": 100,
+  "phasesCompleted": [],
+  "skillsLoaded": [],
+  "filesModified": 1,
+  "depsInstalled": 0
+}

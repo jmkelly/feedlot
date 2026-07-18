@@ -13,3 +13,6 @@ feedlot
 # IDE
 .vscode/
 .idea/
+
+# Secrets
+.env

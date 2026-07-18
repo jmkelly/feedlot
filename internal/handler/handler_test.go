@@ -93,7 +93,7 @@ func setupTestHandler(t *testing.T) (*Handler, *db.DB, *auth.Auth) {
 	}
 
 	a := auth.New("test-jwt-secret-for-testing-purposes")
-	h := New(database, a, "")
+	h := New(database, a, "", "")
 	return h, database, a
 }
 
@@ -977,11 +977,11 @@ func TestNew(t *testing.T) {
 func TestBuildSummaryRequestDefaults(t *testing.T) {
 	h := &Handler{EncryptionKey: ""}
 	req := h.buildSummaryRequest(nil, "test content")
-	if req.Provider != "openai" {
-		t.Errorf("Default provider = %q, want %q", req.Provider, "openai")
+	if req.Provider != "opencode-go" {
+		t.Errorf("Default provider = %q, want %q", req.Provider, "opencode-go")
 	}
-	if req.Model != "gpt-4o-mini" {
-		t.Errorf("Default model = %q, want %q", req.Model, "gpt-4o-mini")
+	if req.Model != "deepseek-v4-flash" {
+		t.Errorf("Default model = %q, want %q", req.Model, "deepseek-v4-flash")
 	}
 	if req.Length != "short" {
 		t.Errorf("Default length = %q, want %q", req.Length, "short")

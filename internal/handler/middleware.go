@@ -16,13 +16,15 @@ type Handler struct {
 	DB            *db.DB
 	Auth          *auth.Auth
 	EncryptionKey string
+	OpenCodeGoKey string
 }
 
-func New(database *db.DB, a *auth.Auth, encryptionKey string) *Handler {
+func New(database *db.DB, a *auth.Auth, encryptionKey string, opencodeGoKey string) *Handler {
 	return &Handler{
 		DB:            database,
 		Auth:          a,
 		EncryptionKey: encryptionKey,
+		OpenCodeGoKey: opencodeGoKey,
 	}
 }
 

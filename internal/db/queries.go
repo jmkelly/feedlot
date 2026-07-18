@@ -268,3 +268,44 @@ func (db *DB) UpsertUserSettings(s *model.UserSettings) error {
 	}
 	return nil
 }
+
+// ─── Log Entries ──────────────────────────────────────────────────────────
+
+func (db *DB) InsertLog(level, message string) error {
+	_, err := db.Exec(`INSERT INTO log_entries (level, message) VALUES ($1, $2)`, level, message)
+	if err != nil {
+		return fmt.Errorf("insert log: %w", err)
+	}
+	return nil
+}
+
+func (db *DB) GetLogs(limit, offset int) ([]model.LogEntry, error) {
+	var entries []model.LogEntry
+	err := db.Select(&entries, `SELECT id, level, message, created_at FROM log_entries ORDER BY id DESC LIMIT $1 OFFSET $2`, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("get logs: %w", err)
+	}
+	if entries == nil {
+		entries = []model.LogEntry{}
+	}
+	return entries, nil
+}
+
+func (db *DB) CountLogs() (int, error) {
+	var count int
+	err := db.Get(&count, `SELECT COUNT(*) FROM log_entries`)
+	if err != nil {
+		return 0, fmt.Errorf("count logs: %w", err)
+	}
+	return count, nil
+}
+
+func (db *DB) MarkArticleRead(id, userID int64) error {
+	_, err := db.Exec(`UPDATE articles SET is_read = 1
+		WHERE id = $1 AND is_read = 0
+		AND feed_id IN (SELECT id FROM feeds WHERE user_id = $2)`, id, userID)
+	if err != nil {
+		return fmt.Errorf("mark article read: %w", err)
+	}
+	return nil
+}

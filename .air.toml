@@ -1,0 +1,25 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  entrypoint = "./tmp/feedlot"
+  cmd = "go build -o ./tmp/feedlot ."
+  delay = 1000
+  exclude_dir = ["tmp", "static", "doc", ".git", ".lemonharness", ".pi", ".playwright-mcp"]
+  exclude_regex = ["_test.go$", "\\.db.*"]
+  include_ext = ["go", "html"]
+  kill_delay = "0s"
+  send_interrupt = false
+  stop_on_error = true
+
+[color]
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = true

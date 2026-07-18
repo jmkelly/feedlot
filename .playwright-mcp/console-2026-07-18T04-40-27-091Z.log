@@ -1,0 +1,7 @@
+[  173825ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://192.168.87.58:8090/login:0
+[  174378ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://192.168.87.58:8090/login:0
+[  408449ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://192.168.87.58:8090/settings:0
+[  411163ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://192.168.87.58:8090/login:0
+[ 7476547ms] [ERROR] htmx:afterRequest, [object HTMLBodyElement] @ https://unpkg.com/htmx.org@2:0
+[ 7476547ms] [ERROR] htmx:sendError, [object HTMLBodyElement] @ https://unpkg.com/htmx.org@2:0
+[ 7476548ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://192.168.87.58:8090/login:0

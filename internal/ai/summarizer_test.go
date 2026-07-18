@@ -54,8 +54,8 @@ func TestSummarizeMedium(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req openaiRequest
 		json.NewDecoder(r.Body).Decode(&req)
-		if req.MaxTokens != 300 {
-			t.Errorf("MaxTokens = %d for medium, want 300", req.MaxTokens)
+		if req.MaxTokens != 2000 {
+			t.Errorf("MaxTokens = %d for medium, want 2000", req.MaxTokens)
 		}
 		resp := openaiResponse{
 			Choices: []openaiChoice{
@@ -89,8 +89,8 @@ func TestSummarizeLong(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req openaiRequest
 		json.NewDecoder(r.Body).Decode(&req)
-		if req.MaxTokens != 500 {
-			t.Errorf("MaxTokens = %d for long, want 500", req.MaxTokens)
+		if req.MaxTokens != 4000 {
+			t.Errorf("MaxTokens = %d for long, want 4000", req.MaxTokens)
 		}
 		resp := openaiResponse{
 			Choices: []openaiChoice{

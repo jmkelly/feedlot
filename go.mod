@@ -7,6 +7,7 @@ require (
 	github.com/go-chi/cors v1.2.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jmoiron/sqlx v1.4.0
+	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-sqlite3 v1.14.48
 	github.com/mmcdole/gofeed v1.4.0
 	golang.org/x/crypto v0.54.0

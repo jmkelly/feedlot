@@ -68,6 +68,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
+	w.Header().Set("HX-Redirect", "/")
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -101,7 +102,10 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if email already exists
-	existing, _ := h.DB.GetUserByEmail(email)
+	existing, err := h.DB.GetUserByEmail(email)
+	if err != nil {
+		log.Printf("check existing user: %v", err)
+	}
 	if existing != nil {
 		h.renderAuth(w, r, "register", email, "Email already registered")
 		return
@@ -152,6 +156,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
+	w.Header().Set("HX-Redirect", "/")
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -190,70 +195,66 @@ func (h *Handler) renderAuth(w http.ResponseWriter, r *http.Request, page, email
 	}
 }
 
-const authPageTemplate = `<!DOCTYPE html>
+const authPageTemplate = `
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Feedlot — {{if eq .Page "login"}}Login{{else}}Register{{end}}</title>
+  <title>Feedlot — {{if eq .Page "login"}}Sign in{{else}}Register{{end}}</title>
+  <script>(function(){var t=null;try{t=localStorage.getItem('feedlot:theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=JetBrains+Mono:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..600&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/htmx.org@2"></script>
+  <script src="/static/js/app.js" defer></script>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/css/app.css">
 </head>
-<body class="bg-stone-50 text-stone-900 antialiased min-h-screen flex items-center justify-center">
-  <div class="w-full max-w-md mx-4">
-    <div class="text-center mb-8">
-      <h1 class="text-4xl font-bold text-amber-800">🐄 Feedlot</h1>
-      <p class="text-stone-500 mt-2">Chew through your feeds, one article at a time.</p>
+<body class="authwrap">
+  <div class="authcard">
+    <div class="authhero">
+      <div class="authhero__mark">🐄</div>
+      <h1 class="authhero__name">Feedlot</h1>
+      <p class="authhero__sub">Chew through your feeds, one article at a time.</p>
     </div>
-    <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
-      {{if .Error}}<div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">{{.Error}}</div>{{end}}
+    <div class="authform">
+      {{if .Error}}<div class="alert alert--err">{{.Error}}</div>{{end}}
       {{if eq .Page "login"}}
-      <form hx-post="/login" hx-target="body" hx-swap="outerHTML" class="space-y-4">
-        <h2 class="text-xl font-semibold text-stone-800 mb-4">Sign in</h2>
-        <div>
-          <label for="email" class="block text-sm font-medium text-stone-700 mb-1">Email</label>
-          <input type="email" id="email" name="email" value="{{.Email}}" required
-            class="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+      <form hx-post="/login" hx-target="body" hx-swap="outerHTML">
+        <h2>Sign in</h2>
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" value="{{.Email}}" required class="input" autofocus>
         </div>
-        <div>
-          <label for="password" class="block text-sm font-medium text-stone-700 mb-1">Password</label>
-          <input type="password" id="password" name="password" required
-            class="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required class="input">
         </div>
-        <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
-          Sign in
-        </button>
-        <p class="text-center text-sm text-stone-500 mt-4">
-          Don't have an account? <a href="/register" class="text-amber-600 hover:text-amber-700 font-medium">Register</a>
-        </p>
+        <button type="submit" class="btn btn--primary w-full">Sign in</button>
+        <p class="authswitch">Don't have an account? <a href="/register">Register</a></p>
       </form>
       {{else}}
-      <form hx-post="/register" hx-target="body" hx-swap="outerHTML" class="space-y-4">
-        <h2 class="text-xl font-semibold text-stone-800 mb-4">Create account</h2>
-        <div>
-          <label for="email" class="block text-sm font-medium text-stone-700 mb-1">Email</label>
-          <input type="email" id="email" name="email" value="{{.Email}}" required
-            class="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+      <form hx-post="/register" hx-target="body" hx-swap="outerHTML">
+        <h2>Create account</h2>
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" value="{{.Email}}" required class="input" autofocus>
         </div>
-        <div>
-          <label for="password" class="block text-sm font-medium text-stone-700 mb-1">Password</label>
-          <input type="password" id="password" name="password" required minlength="8"
-            class="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required minlength="8" class="input">
         </div>
-        <div>
-          <label for="confirm_password" class="block text-sm font-medium text-stone-700 mb-1">Confirm password</label>
-          <input type="password" id="confirm_password" name="confirm_password" required minlength="8"
-            class="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+        <div class="field">
+          <label for="confirm_password">Confirm password</label>
+          <input type="password" id="confirm_password" name="confirm_password" required minlength="8" class="input">
         </div>
-        <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
-          Create account
-        </button>
-        <p class="text-center text-sm text-stone-500 mt-4">
-          Already have an account? <a href="/login" class="text-amber-600 hover:text-amber-700 font-medium">Sign in</a>
-        </p>
+        <button type="submit" class="btn btn--primary w-full">Create account</button>
+        <p class="authswitch">Already have an account? <a href="/login">Sign in</a></p>
       </form>
       {{end}}
     </div>
   </div>
 </body>
-</html>`
+</html>
+`

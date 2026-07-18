@@ -1,0 +1,4 @@
+=== DELEGATE RESULT ===
+SUMMARY: Rewrote static/js/app.js with scroll-past-mark-as-read using IntersectionObserver, scroll progress bar, mark-all-read, keyboard shortcuts, and preserved existing features.
+FILES: /home/james/feedlot/static/js/app.js
+=== END ===
