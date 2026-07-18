@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -41,7 +42,7 @@ func TestSummarizeShort(t *testing.T) {
 		ArticleText: "This is a long article about something interesting. It has multiple sentences of content that should be summarized.",
 		Length:      "short",
 		SummaryLang: "english",
-	})
+		Context:     context.Background()})
 	if err != nil {
 		t.Fatalf("Summarize failed: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestSummarizeMedium(t *testing.T) {
 		ArticleText: "Some article content.",
 		Length:      "medium",
 		SummaryLang: "english",
-	})
+		Context:     context.Background()})
 	if err != nil {
 		t.Fatalf("Summarize failed: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestSummarizeLong(t *testing.T) {
 		ArticleText: "Content for long summary.",
 		Length:      "long",
 		SummaryLang: "english",
-	})
+		Context:     context.Background()})
 	if err != nil {
 		t.Fatalf("Summarize failed: %v", err)
 	}
@@ -119,7 +120,8 @@ func TestSummarizeLong(t *testing.T) {
 
 func TestSummarizeEmptyArticle(t *testing.T) {
 	s := New()
-	_, err := s.Summarize(SummaryRequest{Provider: "openai", ArticleText: ""})
+	_, err := s.Summarize(SummaryRequest{Provider: "openai", ArticleText: "",
+		Context: context.Background()})
 	if err == nil {
 		t.Error("Summarize should fail for empty article text")
 	}
@@ -155,7 +157,7 @@ func TestSummarizeTruncatesLongContent(t *testing.T) {
 		BaseURL:     server.URL,
 		Model:       "gpt-4o-mini",
 		ArticleText: string(longContent),
-	})
+		Context:     context.Background()})
 	if err != nil {
 		t.Fatalf("Summarize failed: %v", err)
 	}
@@ -183,7 +185,7 @@ func TestSummarizeCustomProvider(t *testing.T) {
 		BaseURL:     server.URL,
 		Model:       "my-model",
 		ArticleText: "Custom provider article.",
-	})
+		Context:     context.Background()})
 	if err != nil {
 		t.Fatalf("Summarize with custom provider failed: %v", err)
 	}
@@ -209,7 +211,7 @@ func TestSummarizeWithLanguage(t *testing.T) {
 		Model:       "gpt-4o-mini",
 		ArticleText: "French article content here.",
 		SummaryLang: "french",
-	})
+		Context:     context.Background()})
 	if err != nil {
 		t.Fatalf("Summarize failed: %v", err)
 	}
@@ -237,7 +239,7 @@ func TestSummarizeEmptyResponse(t *testing.T) {
 		BaseURL:     server.URL,
 		Model:       "gpt-4o-mini",
 		ArticleText: "Some content.",
-	})
+		Context:     context.Background()})
 	if err == nil {
 		t.Error("Summarize should fail when API returns empty summary")
 	}
@@ -261,7 +263,7 @@ func TestDefaultProviderFallback(t *testing.T) {
 		BaseURL:     server.URL,
 		Model:       "gpt-4o-mini",
 		ArticleText: "Default fallback test.",
-	})
+		Context:     context.Background()})
 	if err != nil {
 		t.Fatalf("Summarize failed: %v", err)
 	}
@@ -296,7 +298,7 @@ func TestSummarizeRetriesOnHTTPError(t *testing.T) {
 		BaseURL:     server.URL,
 		Model:       "gpt-4o-mini",
 		ArticleText: "Article that triggers retries.",
-	})
+		Context:     context.Background()})
 	if err != nil {
 		t.Fatalf("Summarize should succeed after retries: %v", err)
 	}
@@ -322,7 +324,7 @@ func TestSummarizeAllRetriesExhausted(t *testing.T) {
 		BaseURL:     server.URL,
 		Model:       "gpt-4o-mini",
 		ArticleText: "Article that exhausts retries.",
-	})
+		Context:     context.Background()})
 	if err == nil {
 		t.Error("Summarize should fail when all retries are exhausted")
 	}
@@ -353,7 +355,7 @@ func TestSummarizeAnthropic(t *testing.T) {
 		BaseURL:     server.URL,
 		Model:       "claude-3-haiku-20240307",
 		ArticleText: "Anthropic test article.",
-	})
+		Context:     context.Background()})
 	if err != nil {
 		t.Fatalf("Anthropic Summarize failed: %v", err)
 	}
@@ -383,7 +385,7 @@ func TestSummarizeOllama(t *testing.T) {
 		BaseURL:     server.URL,
 		Model:       "llama3",
 		ArticleText: "Ollama article.",
-	})
+		Context:     context.Background()})
 	if err != nil {
 		t.Fatalf("Ollama Summarize failed: %v", err)
 	}
@@ -408,7 +410,7 @@ func TestSummarizeNoChoices(t *testing.T) {
 		BaseURL:     server.URL,
 		Model:       "gpt-4o-mini",
 		ArticleText: "No choices test.",
-	})
+		Context:     context.Background()})
 	if err == nil {
 		t.Error("Summarize should fail when API returns no choices")
 	}

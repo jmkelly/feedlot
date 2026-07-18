@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,13 +31,14 @@ func New() *Summarizer {
 }
 
 type SummaryRequest struct {
-	Provider      string // openai, anthropic, ollama, custom
-	APIKey        string
-	BaseURL       string
-	Model         string
-	ArticleText   string
-	Length        string // short, medium, long
-	SummaryLang   string // english, original
+	Provider    string // openai, anthropic, ollama, custom
+	APIKey      string
+	BaseURL     string
+	Model       string
+	ArticleText string
+	Length      string // short, medium, long
+	SummaryLang string // english, original
+	Context     context.Context
 }
 
 type openaiMessage struct {
@@ -71,6 +73,143 @@ type openaiResponseFull struct {
 
 type openaiResponse struct {
 	Choices []openaiChoice `json:"choices"`
+}
+
+// cleanSummary strips out thinking/reasoning artifacts that some models
+// emit alongside the actual response.
+//
+// Some reasoning models (DeepSeek, etc.) output chain-of-thought in the
+// `content` field despite being asked not to. This function detects common
+// thinking patterns and extracts only the summary portion.
+//
+// The returned text is always whitespace-collapsed for consistency.
+func cleanSummary(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+
+	// 1. Remove <think>...</think> blocks (DeepSeek R1, Qwen, etc.)
+	for {
+		start := strings.Index(s, "<think>")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(s[start:], "</think>")
+		if end < 0 {
+			s = strings.TrimSpace(s[:start])
+			break
+		}
+		s = strings.TrimSpace(s[:start] + s[start+end+len("</think>"):])
+	}
+	if s == "" {
+		return s
+	}
+
+	// 2. Collapse whitespace to make paragraph detection reliable.
+	s = collapseWhitespace(s)
+
+	// 3. Split into paragraphs and detect thinking patterns.
+	paragraphs := strings.Split(s, "\n")
+	if len(paragraphs) <= 1 {
+		return s // single paragraph — already collapsed
+	}
+
+	// Check if this looks like reasoning output:
+	//   - Starts with "Thinking", "Let me", "First,", "I need to", etc.
+	//   - Starts with a numbered list item ("1.", "2.", etc.)
+	//   - Contains numbered items referencing "Analyze", "Request", "Constraint" etc.
+	first := strings.TrimSpace(strings.ToLower(paragraphs[0]))
+
+	hasThinkingPrefix := strings.HasPrefix(first, "thinking") ||
+		strings.HasPrefix(first, "let me") ||
+		strings.HasPrefix(first, "first,") ||
+		strings.HasPrefix(first, "i need to") ||
+		strings.HasPrefix(first, "i'll") ||
+		strings.HasPrefix(first, "i will") ||
+		strings.HasPrefix(first, "i should") ||
+		strings.HasPrefix(first, "ok,") ||
+		strings.HasPrefix(first, "okay,")
+	hasNumberedList := false
+	listItemCount := 0
+	for _, p := range paragraphs {
+		t := strings.TrimSpace(p)
+		if len(t) > 2 && t[0] >= '1' && t[0] <= '9' && t[1] == '.' {
+			listItemCount++
+		}
+	}
+	if listItemCount >= 2 || (listItemCount >= 1 && hasThinkingPrefix) {
+		hasNumberedList = true
+	}
+
+	if !hasThinkingPrefix && !hasNumberedList {
+		return s // not obviously thinking — return collapsed as-is
+	}
+
+	// 4. The text looks like reasoning. Try to extract just the summary.
+	// Strategy: look for the last paragraph that doesn't look like a
+	// meta-analysis step (numbered, analyzing the task, etc.)
+	// OR find a marker line that introduces the summary.
+
+	// First pass: find the last paragraph that looks like actual content
+	// (not a numbered step, not meta-commentary about the task).
+	var summaryParagraphs []string
+	for _, p := range paragraphs {
+		t := strings.TrimSpace(p)
+		if t == "" {
+			continue
+		}
+		// Skip numbered list items (e.g. "1. **Analyze...**")
+		if len(t) > 2 && t[0] >= '1' && t[0] <= '9' && t[1] == '.' {
+			continue
+		}
+		// Skip meta-instruction lines — use anchored checks to avoid
+		// false positives on words like "review" in normal content.
+		lower := strings.ToLower(t)
+		if strings.Contains(lower, "analyze the request") ||
+			strings.Contains(lower, "formulate response") ||
+			strings.Contains(lower, "draft summary") ||
+			strings.HasPrefix(lower, "review") ||
+			strings.Contains(lower, "constraint") {
+			continue
+		}
+		summaryParagraphs = append(summaryParagraphs, t)
+	}
+
+	if len(summaryParagraphs) > 0 {
+		result := strings.Join(summaryParagraphs, " ")
+		result = strings.TrimSpace(result)
+		if result != "" {
+			return result
+		}
+	}
+
+	// Last resort: take the last paragraph that isn't a numbered item
+	for i := len(paragraphs) - 1; i >= 0; i-- {
+		t := strings.TrimSpace(paragraphs[i])
+		if t == "" {
+			continue
+		}
+		if len(t) > 2 && t[0] >= '1' && t[0] <= '9' && t[1] == '.' {
+			continue
+		}
+		return t
+	}
+
+	return s
+}
+
+// collapseWhitespace normalizes line breaks and trims each line.
+func collapseWhitespace(s string) string {
+	lines := strings.Split(s, "\n")
+	var result []string
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		if t != "" {
+			result = append(result, t)
+		}
+	}
+	return strings.Join(result, "\n")
 }
 
 func (s *Summarizer) TestConnection(req SummaryRequest) error {
@@ -112,7 +251,7 @@ func (s *Summarizer) Summarize(req SummaryRequest) (string, error) {
 		langInstruction = fmt.Sprintf(" Write the summary in %s.", req.SummaryLang)
 	}
 
-	systemPrompt := fmt.Sprintf("Summarize the following article concisely. Return only the summary text, no preamble.%s", langInstruction)
+	systemPrompt := fmt.Sprintf("Summarize this concisely. Output the summary only.%s", langInstruction)
 	userPrompt := fmt.Sprintf("Article:\n\n%s\n\nSummary:", text)
 
 	// Route to provider
@@ -161,7 +300,7 @@ func (s *Summarizer) callOpenAICompatible(req SummaryRequest, systemPrompt, user
 			time.Sleep(time.Duration(attempt*2) * time.Second)
 		}
 
-		httpReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
+		httpReq, err := http.NewRequestWithContext(req.Context, "POST", url, bytes.NewReader(body))
 		if err != nil {
 			return "", fmt.Errorf("create request: %w", err)
 		}
@@ -188,35 +327,18 @@ func (s *Summarizer) callOpenAICompatible(req SummaryRequest, systemPrompt, user
 			continue
 		}
 
-		// Try standard response first, then full struct for reasoning models
-		var apiResp openaiResponse
+		// Parse response — use openaiResponseFull (superset that captures both
+		// content and reasoning_content, so it works with any provider).
+		var apiResp openaiResponseFull
 		if err := json.Unmarshal(respBody, &apiResp); err != nil {
 			lastErr = fmt.Errorf("unmarshal response: %w", err)
 			continue
 		}
 
 		if len(apiResp.Choices) > 0 {
-			summary := strings.TrimSpace(apiResp.Choices[0].Message.Content)
+			summary := cleanSummary(strings.TrimSpace(apiResp.Choices[0].Message.Content))
 			if summary != "" {
 				return summary, nil
-			}
-		}
-
-		// Reasoning models may put content in reasoning_content
-		var apiRespFull openaiResponseFull
-		if err := json.Unmarshal(respBody, &apiRespFull); err != nil {
-			lastErr = fmt.Errorf("unmarshal response: %w", err)
-			continue
-		}
-
-		if len(apiRespFull.Choices) > 0 {
-			summary := strings.TrimSpace(apiRespFull.Choices[0].Message.Content)
-			if summary != "" {
-				return summary, nil
-			}
-			reasoning := strings.TrimSpace(apiRespFull.Choices[0].Message.ReasoningContent)
-			if reasoning != "" {
-				return reasoning, nil
 			}
 		}
 
@@ -237,11 +359,6 @@ type anthropicRequest struct {
 
 type anthropicContent struct {
 	Text string `json:"text"`
-}
-
-type anthropicMessage struct {
-	Role    string             `json:"role"`
-	Content []anthropicContent `json:"content"`
 }
 
 type anthropicResponse struct {
@@ -269,7 +386,7 @@ func (s *Summarizer) callAnthropic(req SummaryRequest, systemPrompt, userPrompt 
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", baseURL+"/messages", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(req.Context, "POST", baseURL+"/messages", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
@@ -289,7 +406,7 @@ func (s *Summarizer) callAnthropic(req SummaryRequest, systemPrompt, userPrompt 
 	}
 
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("Anthropic API error (status %d): %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("anthropic API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	var apiResp anthropicResponse
@@ -343,7 +460,7 @@ func (s *Summarizer) listOpenAIModels(req SummaryRequest) ([]string, error) {
 		}
 	}
 
-	httpReq, err := http.NewRequest("GET", baseURL+"/models", nil)
+	httpReq, err := http.NewRequestWithContext(req.Context, "GET", baseURL+"/models", nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -385,7 +502,7 @@ func (s *Summarizer) listAnthropicModels(req SummaryRequest) ([]string, error) {
 		baseURL = "https://api.anthropic.com/v1"
 	}
 
-	httpReq, err := http.NewRequest("GET", baseURL+"/models", nil)
+	httpReq, err := http.NewRequestWithContext(req.Context, "GET", baseURL+"/models", nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -404,7 +521,7 @@ func (s *Summarizer) listAnthropicModels(req SummaryRequest) ([]string, error) {
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Anthropic API error (status %d): %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("anthropic API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	var apiResp openAIModelsResponse
@@ -426,7 +543,7 @@ func (s *Summarizer) listOllamaModels(req SummaryRequest) ([]string, error) {
 		baseURL = "http://localhost:11434"
 	}
 
-	httpReq, err := http.NewRequest("GET", baseURL+"/api/tags", nil)
+	httpReq, err := http.NewRequestWithContext(req.Context, "GET", baseURL+"/api/tags", nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -443,7 +560,7 @@ func (s *Summarizer) listOllamaModels(req SummaryRequest) ([]string, error) {
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("ollama API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	var apiResp ollamaTagsResponse
@@ -460,10 +577,10 @@ func (s *Summarizer) listOllamaModels(req SummaryRequest) ([]string, error) {
 }
 
 type ollamaRequest struct {
-	Model       string          `json:"model"`
-	Messages    []openaiMessage `json:"messages"`
-	Stream      bool            `json:"stream"`
-	Options     map[string]any  `json:"options,omitempty"`
+	Model    string          `json:"model"`
+	Messages []openaiMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
+	Options  map[string]any  `json:"options,omitempty"`
 }
 
 type ollamaResponse struct {
@@ -494,7 +611,7 @@ func (s *Summarizer) callOllama(req SummaryRequest, systemPrompt, userPrompt str
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", baseURL+"/api/chat", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(req.Context, "POST", baseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
@@ -512,7 +629,7 @@ func (s *Summarizer) callOllama(req SummaryRequest, systemPrompt, userPrompt str
 	}
 
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("ollama API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	var apiResp ollamaResponse
