@@ -22,16 +22,8 @@ var summarizer = ai.New()
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	userID := GetUserID(r)
 
-	feeds, err := h.DB.GetUserFeeds(userID)
-	if err != nil {
-		log.Printf("get user feeds: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
 	// Check for feed_id query parameter
 	feedIDStr := r.URL.Query().Get("feed_id")
-	var articles []model.Article
 	var selectedFeedID *int64
 
 	if feedIDStr != "" {
@@ -41,9 +33,31 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	articles, err = h.DB.GetArticlesByUserID(userID, selectedFeedID)
+	articles, err := h.DB.GetArticlesByUserID(userID, selectedFeedID)
 	if err != nil {
 		log.Printf("get articles: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// If this is an HTMX request (e.g. clicking a feed in the sidebar),
+	// return only the article list fragment — not the full dashboard page.
+	// This avoids the hx-select nesting bug where the entire <section id="article-list">
+	// from the full page gets nested inside the existing one.
+	if r.Header.Get("HX-Request") == "true" {
+		data := map[string]any{
+			"Articles": articles,
+		}
+		if err := articleListTmpl.Execute(w, data); err != nil {
+			log.Printf("render article list: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	feeds, err := h.DB.GetUserFeeds(userID)
+	if err != nil {
+		log.Printf("get user feeds: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -549,7 +563,7 @@ const dashboardTemplate = `
           <div class="feed{{if eq $.FeedID (printf "%d" .ID)}} feed--active{{end}}" data-feed-id="{{.ID}}">
             <a href="/?feed_id={{.ID}}" class="feed__row"
                hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
-               hx-indicator="#loading">
+               hx-indicator="#loading" hx-trigger="click[preventDefault]">
               <span class="feed__title">{{.Title}}</span>
               {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
             </a>
@@ -625,7 +639,7 @@ const feedListTemplate = `
   <div class="feed" data-feed-id="{{.ID}}">
     <a href="/?feed_id={{.ID}}" class="feed__row"
        hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
-       hx-indicator="#loading">
+       hx-indicator="#loading" hx-trigger="click[preventDefault]">
       <span class="feed__title">{{.Title}}</span>
       {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
     </a>
