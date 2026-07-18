@@ -13,6 +13,7 @@ import (
 
 	"github.com/james/feedlot/internal/auth"
 	"github.com/james/feedlot/internal/db"
+	"github.com/james/feedlot/internal/feeds"
 	"github.com/james/feedlot/internal/handler"
 )
 
@@ -56,6 +57,12 @@ func main() {
 	// ─── Dependencies ──────────────────────────────────────────────────────
 	authService := auth.New(jwtSecret)
 	h := handler.New(database, authService, encryptionKey, opencodeGoKey)
+
+	// ─── Background Feed Refresher ─────────────────────────────────────────
+	refreshInterval := getEnvDuration("FEEDLOT_REFRESH_INTERVAL", 30*time.Minute)
+	refresher := feeds.NewRefresher(database, refreshInterval)
+	refresher.Start()
+	log.Printf("Background feed refresher started (interval: %v)", refreshInterval)
 
 	// ─── Router ────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -132,6 +139,18 @@ func main() {
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
+}
+
+func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
+	if val := os.Getenv(key); val != "" {
+		d, err := time.ParseDuration(val)
+		if err != nil {
+			log.Printf("invalid %s %q, using default %v", key, val, defaultVal)
+			return defaultVal
+		}
+		return d
+	}
+	return defaultVal
 }
 
 func getEnv(key, defaultVal string) string {

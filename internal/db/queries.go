@@ -133,6 +133,19 @@ func (db *DB) UpdateFeedLastFetched(id int64, t time.Time) error {
 	return nil
 }
 
+func (db *DB) GetAllFeeds() ([]model.Feed, error) {
+	var feeds []model.Feed
+	err := db.Select(&feeds, `SELECT id, user_id, title, description, feed_url, site_url, icon_url,
+		last_fetched_at, created_at FROM feeds ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("get all feeds: %w", err)
+	}
+	if feeds == nil {
+		feeds = []model.Feed{}
+	}
+	return feeds, nil
+}
+
 func (db *DB) GetFeedByURL(feedURL string) (*model.Feed, error) {
 	f := &model.Feed{}
 	err := db.Get(f, `SELECT id, user_id, title, description, feed_url, site_url, icon_url,
