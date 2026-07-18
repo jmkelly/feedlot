@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,10 +13,12 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/james/feedlot/internal/ai"
 	"github.com/james/feedlot/internal/auth"
 	"github.com/james/feedlot/internal/db"
 	"github.com/james/feedlot/internal/model"
 )
+
 // noRedirectClient returns an HTTP client that does not follow redirects.
 func noRedirectClient() *http.Client {
 	return &http.Client{
@@ -24,7 +27,6 @@ func noRedirectClient() *http.Client {
 		},
 	}
 }
-
 
 // setupTestHandler creates a complete handler with in-memory database for testing.
 func setupTestHandler(t *testing.T) (*Handler, *db.DB, *auth.Auth) {
@@ -93,7 +95,7 @@ func setupTestHandler(t *testing.T) (*Handler, *db.DB, *auth.Auth) {
 	}
 
 	a := auth.New("test-jwt-secret-for-testing-purposes")
-	h := New(database, a, "", "")
+	h := New(database, a, ai.New(), "", "")
 	return h, database, a
 }
 
@@ -232,7 +234,10 @@ func TestRegisterPasswordMismatch(t *testing.T) {
 	defer server.Close()
 
 	body := strings.NewReader("email=test@example.com&password=password123&confirm_password=different")
-	resp, _ := http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	resp, err := http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -249,7 +254,10 @@ func TestRegisterShortPassword(t *testing.T) {
 	defer server.Close()
 
 	body := strings.NewReader("email=test@example.com&password=short&confirm_password=short")
-	resp, _ := http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	resp, err := http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	// Should re-render form with error
@@ -268,12 +276,18 @@ func TestRegisterDuplicateEmail(t *testing.T) {
 
 	// First registration
 	body := strings.NewReader("email=dupe@example.com&password=password123&confirm_password=password123")
-	resp, _ := http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	resp, err := http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	resp.Body.Close()
 
 	// Second registration with same email
 	body = strings.NewReader("email=dupe@example.com&password=otherpass123&confirm_password=otherpass123")
-	resp, _ = http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	resp, err = http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -294,7 +308,10 @@ func TestLoginSuccess(t *testing.T) {
 	defer server.Close()
 
 	body := strings.NewReader("email=login@example.com&password=correct-password")
-	resp, _ := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	resp, err := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusSeeOther {
@@ -325,7 +342,10 @@ func TestLoginWrongPassword(t *testing.T) {
 	defer server.Close()
 
 	body := strings.NewReader("email=wrong@example.com&password=wrong-password")
-	resp, _ := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	resp, err := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -342,7 +362,10 @@ func TestLoginNonexistentUser(t *testing.T) {
 	defer server.Close()
 
 	body := strings.NewReader("email=nobody@example.com&password=anything")
-	resp, _ := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	resp, err := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -389,7 +412,10 @@ func TestLogoutWithoutAuth(t *testing.T) {
 
 	// Logout without a cookie should redirect to login
 	// (actually the middleware will redirect)
-	resp, _ := noRedirectClient().Post(server.URL+"/logout", "application/x-www-form-urlencoded", nil)
+	resp, err := noRedirectClient().Post(server.URL+"/logout", "application/x-www-form-urlencoded", nil)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	// Without auth middleware, it should redirect to login
@@ -432,7 +458,10 @@ func TestDashboardWithoutAuth(t *testing.T) {
 	server := httptest.NewServer(r)
 	defer server.Close()
 
-	resp, _ := noRedirectClient().Get(server.URL + "/")
+	resp, err := noRedirectClient().Get(server.URL + "/")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusSeeOther {
@@ -454,7 +483,10 @@ func TestListFeedsEmpty(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL+"/feeds", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -476,7 +508,10 @@ func TestAddFeedInvalidURL(t *testing.T) {
 	req, _ := http.NewRequest("POST", server.URL+"/feeds", body)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -496,7 +531,10 @@ func TestRemoveFeedInvalidID(t *testing.T) {
 
 	req, _ := http.NewRequest("DELETE", server.URL+"/feeds/not-a-number", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -516,7 +554,10 @@ func TestRefreshFeedNotFound(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", server.URL+"/feeds/99999/refresh", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -536,7 +577,10 @@ func TestRefreshFeedInvalidID(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", server.URL+"/feeds/invalid/refresh", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -558,7 +602,10 @@ func TestShowArticleNotFound(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL+"/articles/99999", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -578,7 +625,10 @@ func TestShowArticleInvalidID(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL+"/articles/invalid", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -598,7 +648,10 @@ func TestToggleReadInvalidID(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", server.URL+"/articles/invalid/toggle", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -618,7 +671,10 @@ func TestToggleReadNotFound(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", server.URL+"/articles/99999/toggle", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -640,7 +696,10 @@ func TestSettingsPage(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL+"/settings", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -662,7 +721,10 @@ func TestSaveSettings(t *testing.T) {
 	req, _ := http.NewRequest("POST", server.URL+"/settings", body)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -678,7 +740,10 @@ func TestSettingsRequiresAuth(t *testing.T) {
 	server := httptest.NewServer(r)
 	defer server.Close()
 
-	resp, _ := noRedirectClient().Get(server.URL + "/settings")
+	resp, err := noRedirectClient().Get(server.URL + "/settings")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusSeeOther {
@@ -696,7 +761,10 @@ func TestLoginPage(t *testing.T) {
 	server := httptest.NewServer(r)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL + "/login")
+	resp, err := http.Get(server.URL + "/login")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -712,7 +780,10 @@ func TestRegisterPage(t *testing.T) {
 	server := httptest.NewServer(r)
 	defer server.Close()
 
-	resp, _ := http.Get(server.URL + "/register")
+	resp, err := http.Get(server.URL + "/register")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -734,7 +805,10 @@ func TestListArticles(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL+"/articles", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -754,7 +828,10 @@ func TestAuthenticatedUserRedirectedToLoginOnBadToken(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL+"/", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: "invalid-jwt-token-that-will-fail-validation"})
-	resp, _ := noRedirectClient().Do(req)
+	resp, err := noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusSeeOther {
@@ -808,7 +885,10 @@ func TestRegisterEmptyFields(t *testing.T) {
 
 	// Test with empty email and password
 	body := strings.NewReader("email=&password=&confirm_password=")
-	resp, _ := http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	resp, err := http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -936,7 +1016,10 @@ func TestLoginEmptyFields(t *testing.T) {
 	defer server.Close()
 
 	body := strings.NewReader("email=&password=")
-	resp, _ := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	resp, err := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	// Should re-render with error
@@ -955,7 +1038,10 @@ func TestLoginInvalidForm(t *testing.T) {
 
 	// Send invalid form data (garbage)
 	body := strings.NewReader("%%%invalid%%%")
-	resp, _ := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	resp, err := noRedirectClient().Post(server.URL+"/login", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -976,7 +1062,7 @@ func TestNew(t *testing.T) {
 
 func TestBuildSummaryRequestDefaults(t *testing.T) {
 	h := &Handler{EncryptionKey: ""}
-	req := h.buildSummaryRequest(nil, "test content")
+	req := h.buildSummaryRequest(context.Background(), nil, "test content")
 	if req.Provider != "opencode-go" {
 		t.Errorf("Default provider = %q, want %q", req.Provider, "opencode-go")
 	}
@@ -1004,7 +1090,7 @@ func TestBuildSummaryRequestFromSettings(t *testing.T) {
 		SummaryLanguage: "spanish",
 	}
 
-	req := h.buildSummaryRequest(settings, "article text")
+	req := h.buildSummaryRequest(context.Background(), settings, "article text")
 	if req.Provider != "anthropic" {
 		t.Errorf("Provider = %q", req.Provider)
 	}
@@ -1063,7 +1149,10 @@ func TestDashboardWithFeedFilter(t *testing.T) {
 	// Request dashboard with feed filter
 	req, _ := http.NewRequest("GET", server.URL+"/?feed_id=", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -1097,7 +1186,10 @@ func TestListArticlesWithFeedID(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL+"/articles?feed_id=", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -1117,7 +1209,10 @@ func TestListArticlesWithInvalidFeedID(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL+"/articles?feed_id=invalid", nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	// Should still work, just ignore the invalid feed_id
@@ -1141,7 +1236,10 @@ func TestSaveSettingsEmptyFormData(t *testing.T) {
 	req, _ := http.NewRequest("POST", server.URL+"/settings", body)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -1158,7 +1256,10 @@ func TestRegisterInvalidFormData(t *testing.T) {
 	defer server.Close()
 
 	body := strings.NewReader("%%%")
-	resp, _ := http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	resp, err := http.Post(server.URL+"/register", "application/x-www-form-urlencoded", body)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -1193,7 +1294,10 @@ func TestShowArticleWithContent(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL+"/articles/"+itoa(article.ID), nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -1224,7 +1328,10 @@ func TestShowArticleWithoutContent(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", server.URL+"/articles/"+itoa(article.ID), nil)
 	req.AddCookie(&http.Cookie{Name: "feedlot_token", Value: jwt})
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -1235,4 +1342,3 @@ func TestShowArticleWithoutContent(t *testing.T) {
 func itoa(i int64) string {
 	return fmt.Sprintf("%d", i)
 }
-
