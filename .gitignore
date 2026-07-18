@@ -16,3 +16,14 @@ feedlot
 
 # Secrets
 .env
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Pi skills (third-party)
+.pi/skills/
+
+# Review artifacts
+/doc/ui-ux-review.md
+/review-*.png
+/scripts/
