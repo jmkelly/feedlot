@@ -332,6 +332,51 @@
     }
   });
 
+  // ─── Mobile sidebar drawer ────────────────────────────────────────
+
+  function toggleSidebar() {
+    var sidebar = document.getElementById('feed-sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (!sidebar) return;
+    var isOpen = sidebar.classList.toggle('is-open');
+    if (overlay) overlay.classList.toggle('is-open', isOpen);
+  }
+
+  function closeSidebar() {
+    var sidebar = document.getElementById('feed-sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (sidebar) sidebar.classList.remove('is-open');
+    if (overlay) overlay.classList.remove('is-open');
+  }
+
+  // ─── Keyboard shortcuts help ───────────────────────────────────────
+
+  function toggleShortcuts() {
+    var overlay = document.getElementById('shortcuts-overlay');
+    if (!overlay) return;
+    overlay.hidden = !overlay.hidden;
+  }
+
+  // Close sidebar when clicking a feed link on mobile
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest('#feed-sidebar a[hx-get]');
+    if (link && window.innerWidth <= 960) {
+      setTimeout(closeSidebar, 150);
+    }
+  });
+
+  // ─── Password visibility toggle ────────────────────────────────────
+
+  // Exposed globally so inline onclick handlers can use it
+  window.togglePasswordVisibility = function(btn, inputId) {
+    var input = document.getElementById(inputId);
+    if (!input) return;
+    var isPassword = input.type === 'password';
+    input.type = isPassword ? 'text' : 'password';
+    btn.textContent = isPassword ? '🙈' : '👁';
+    btn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+  };
+
   // ─── Wiring ─────────────────────────────────────────────────────
   // Note: login/register submit through HTMX and swap the whole <body>,
   // so dashboard controls may appear long after DOMContentLoaded. Wire
@@ -363,8 +408,8 @@
       setupScrollObserver();
     }
 
-    // Auto-dismiss flash messages after 5 seconds
-    var flashMessages = document.querySelectorAll('.alert:not(._timed)');
+    // Only auto-dismiss success toasts (not error toasts — those stay until dismissed)
+    var flashMessages = document.querySelectorAll('.alert--ok:not(._timed)');
     flashMessages.forEach(function(msg) {
       if (msg.textContent.trim() !== '') {
         msg._timed = true;
@@ -375,6 +420,20 @@
             msg.style.display = 'none';
           }, 300);
         }, 5000);
+      }
+    });
+    // Add close button to error alerts
+    var errMessages = document.querySelectorAll('.alert--err:not(._closeWired)');
+    errMessages.forEach(function(msg) {
+      if (msg.textContent.trim() !== '') {
+        msg._closeWired = true;
+        var closeBtn = document.createElement('button');
+        closeBtn.textContent = '✕';
+        closeBtn.style.cssText = 'margin-left:.65rem;background:none;border:none;cursor:pointer;color:inherit;font-size:.75rem;float:right;opacity:.7;';
+        closeBtn.onmouseenter = function() { closeBtn.style.opacity = '1'; };
+        closeBtn.onmouseleave = function() { closeBtn.style.opacity = '.7'; };
+        closeBtn.onclick = function() { msg.style.display = 'none'; };
+        msg.appendChild(closeBtn);
       }
     });
   }
@@ -388,13 +447,16 @@
     if (t.closest('#theme-toggle')) { handleThemeToggle(); return; }
     if (t.closest('#scroll-read-toggle')) { handleScrollReadToggle(); return; }
     if (t.closest('#mark-all-read')) { handleMarkAllRead(); return; }
+    if (t.closest('#menu-toggle')) { toggleSidebar(); return; }
+    if (t.closest('#sidebar-overlay')) { closeSidebar(); return; }
+    if (t.closest('#shortcuts-help')) { toggleShortcuts(); return; }
   });
 
   // ─── Global keyboard shortcuts ─────────────────────────────────────
 
   document.addEventListener('keydown', function(e) {
-    // Don't capture when typing in inputs
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+    // Don't capture when typing in inputs or contenteditable elements
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable) {
       return;
     }
 
@@ -429,6 +491,10 @@
         e.preventDefault();
         navigateFeed(-1);
         break;
+      case '?':
+        e.preventDefault();
+        toggleShortcuts();
+        break;
     }
   });
 
@@ -442,6 +508,13 @@
     seenIds.clear();
     wireControls();
     rescanCards();
+
+    // Reset scroll when filtering by feed or loading new articles
+    var target = e.detail.target;
+    if (target && target.id === 'article-list') {
+      var stream = document.getElementById('article-list');
+      if (stream) stream.scrollTop = 0;
+    }
   });
 
   document.addEventListener('htmx:afterRequest', function(e) {
@@ -450,6 +523,54 @@
       trigger.textContent = '↻';
       trigger.style.animation = '';
     }
+  });
+
+  // ─── Global HTMX error surface ─────────────────────────────────────
+
+  /** Show a toast notification. Auto-dismisses .alert--ok, keeps .alert--err. */
+  function showToast(message, type) {
+    if (!message) return;
+    type = type || 'err';
+    var container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      container.style.cssText = 'position:fixed;bottom:1rem;right:1rem;z-index:9999;display:flex;flex-direction:column;gap:.5rem;max-width:28rem;';
+      document.body.appendChild(container);
+    }
+    var el = document.createElement('div');
+    el.className = 'alert alert--' + type + ' toast';
+    el.style.cssText = 'margin:0;animation:slideIn .25s ease-out;';
+    el.textContent = message;
+    // Add close button for error toasts
+    if (type === 'err') {
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      closeBtn.style.cssText = 'margin-left:.5rem;background:none;border:none;cursor:pointer;color:inherit;font-size:.8rem;float:right;';
+      closeBtn.onclick = function() { el.remove(); };
+      el.appendChild(closeBtn);
+      el.style.paddingRight = '.5rem';
+    }
+    container.appendChild(el);
+    // Only auto-dismiss success toasts
+    if (type === 'ok') {
+      setTimeout(function() {
+        el.style.transition = 'opacity 300ms ease-out';
+        el.style.opacity = '0';
+        setTimeout(function() { el.remove(); }, 300);
+      }, 5000);
+    }
+  }
+
+  // Surface all HTMX errors as toasts
+  // NOTE: We use a generic message instead of xhr.responseText to avoid
+  // leaking internal server error details (stack traces, file paths, etc.)
+  // to end users. Actual error details can be inspected in browser dev tools.
+  document.addEventListener('htmx:responseError', function(e) {
+    var xhr = e.detail.xhr;
+    // Don't surface 401/redirects — those are handled by the auth flow
+    if (xhr && (xhr.status === 401 || xhr.status === 403)) return;
+    showToast('Something went wrong', 'err');
   });
 
 })();
