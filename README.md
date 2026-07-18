@@ -4,10 +4,6 @@
 
 **Feedlot** subscribes to your favourite blogs, fetches full articles, and runs them through an LLM to generate short, digestible summaries. Scan dozens of posts in seconds — without ever leaving the trough.
 
-<p align="center">
-  <img src="screenshots/03-dashboard.png" alt="Feedlot dashboard" width="800" />
-</p>
-
 ---
 
 ## ✨ Features
@@ -25,19 +21,6 @@
 - **🐳 Single binary** — Compiles to a ~19 MB static binary. Deploy anywhere.
 
 ---
-
-## 📸 Screenshots
-
-| | | |
-|:---:|:---:|:---:|
-| ![Login](screenshots/01-login.png) | ![Register](screenshots/02-register.png) | ![Dashboard](screenshots/03-dashboard.png) |
-| **Login** | **Register** | **Dashboard** |
-| ![Summarizing](screenshots/04-summarizing.png) | ![Settings](screenshots/05-settings.png) | ![Test Connection](screenshots/06-test-connection.png) |
-| **AI Summarizing** | **Settings** | **Test Connection** |
-| ![Dark Mode](screenshots/07-dark-mode.png) | ![Feed Filter](screenshots/08-feed-filter.png) | ![Mobile](screenshots/09-mobile.png) |
-| **Dark Mode** | **Feed Filter** | **Mobile** |
-| ![Mobile Articles](screenshots/10-mobile-articles.png) | ![Admin Logs](screenshots/11-admin-logs.png) | |
-| **Mobile Articles** | **Admin Logs** | |
 
 ---
 
