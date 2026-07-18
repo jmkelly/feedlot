@@ -1,36 +1,95 @@
 ---
 name: commit
-description: Analyses diffs, groups logical changes, and commits each group with a conventional commit message.
+description: >
+  Smart commit with Conventional Commits: groups logical changes,
+  infers type + scope from file paths, and generates messages in
+  `<type>(<scope>): <description>` format.
+argument-hint: "Describe the changes in one line / or /commit for interactive"
 ---
 
 # Commit
 
-When the user asks to commit, automatically group related changes into separate conventional commits.
+**Leading word:** _atomic_ — one logical change per commit, one clear message per change.
 
-## Process
+Group related file changes into atomic commits with conventional messages. The `/commit` command (or this skill) analyses `git status`, detects change patterns, infers the correct type + scope, and writes a structured message.
 
-1. **Analyse** — Run `git diff --stat` and `git diff` (or `git diff --cached` if things are staged) to understand all current changes.
+## Conventional Commit Format
 
-2. **Group logically** — Partition changes into logical groups. For example:
-   - A new feature spanning multiple files → one group
-   - A bug fix in a separate file → another group  
-   - Schema/migration changes → one group
-   - Refactoring that touches several files → one group
-   - Configuration or tooling changes → one group
-   - Documentation updates → one group
+```
+<type>(<scope>): <description>
 
-3. **For each group**, determine:
-   - **type** — `feat`, `fix`, `chore`, `docs`, `refactor`, `style`, `test`, `perf`
-   - **scope** (optional) — e.g. `ui`, `handler`, `db`, `api`, `feeds`
-   - **description** — short imperative summary of what this group does
+[optional body]
 
-4. **Commit each group** — Run `git add <files-in-group>` then `git commit -m "type(scope): description"`. If not all changes are staged yet, stage only the files for the current group.
+[optional footer(s)]
+```
 
-5. Show the user a summary of all commits made.
+### Types
 
-## Principles
+| Type       | When to Use                                          |
+|------------|------------------------------------------------------|
+| `feat`     | A new feature for the user                           |
+| `fix`      | A bug fix                                            |
+| `docs`     | Documentation only changes                           |
+| `style`    | Formatting, whitespace, missing semicolons (no logic) |
+| `refactor` | Code change that neither fixes nor adds functionality |
+| `perf`     | Performance improvement                              |
+| `test`     | Adding/improving tests                               |
+| `build`    | Build system or external dependency changes          |
+| `ci`       | CI configuration and scripts                         |
+| `chore`    | Other changes (config, tooling, meta)                |
+| `revert`   | Reverts a previous commit                            |
 
-- Keep commits focused: one logical change per commit.
-- A group may be a single file or span many files — what matters is that they form one coherent change.
-- Use scopes that match the project's architecture (e.g. `ui`, `handler`, `db`, `feeds`, `auth`).
-- If the user provides explicit instructions ("commit as feat(ui): ..."), follow their lead and group accordingly.
+Source: [conventionalcommits.org](https://www.conventionalcommits.org/)
+
+### Scope Examples
+
+Infer scope from the directory/module that got the most changes:
+
+| Pattern               | Scope         |
+|-----------------------|---------------|
+| `.pi/skills/*`        | `skill`       |
+| `.pi/extensions/*`    | `extensions`  |
+| specifically `lemonharness/` | `memory`, `workspace`, `search`, `quality-gate`, `ui`, `delegate` |
+| `src/lib/`            | `lib`         |
+| `tests/`              | `tests`       |
+| `docs/`               | `docs`        |
+| `.github/`            | `ci`          |
+
+## Rules
+
+1. **One logical change per commit** — If unrelated files are changed, split into multiple commits.
+2. **Infer type from content** — `.md` files → `docs`, test files → `test`, config → `chore`, new features → `feat`.
+3. **Scope from directory** — the deepest common directory of changed files is the best scope hint.
+4. **Description is imperative** — "add", "fix", "remove", not "added", "fixed", "removed".
+5. **Description is lowercase** — no capital first letter. No trailing period.
+6. **Max 72 chars** for the subject line. Wrap body at 72 chars.
+7. **Body explains why, not what** — the diff shows what changed. The body explains the motivation.
+8. **Footer for breaking changes** — `BREAKING CHANGE:` footer when the API contract changes.
+
+## Auto-Detect Keywords
+
+commit, conventional commit, smart commit, git commit, commit message, staged, changes, diff
+
+## Pseudocode Contract
+
+```
+SKILL commit
+INPUTS:
+  git_status: string // output of `git status --porcelain`
+  user_summary: string (optional) // user-provided description hint
+OUTPUTS:
+  commit_message: string // generated conventional commit message
+  grouped_changes: array // files grouped by logical change
+PRECONDITIONS:
+  - git is available
+  - there are staged or unstaged changes
+POSTCONDITIONS:
+  - commit_message matches <type>(<scope>): <description>
+  - scope is inferred from file paths
+  - description is imperative, lowercase, ≤72 chars
+  - if multiple logical groups exist, user is prompted to choose
+ERROR_HANDLING:
+  - no changes: inform user, do nothing
+  - ambiguous scope: prefer root module name
+  - unknown type: default to "chore"
+```

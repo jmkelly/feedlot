@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+"""autotest — structured Go test runner for the Feedlot project.
+
+Runs `go test` with configurable modes and returns structured JSON output
+so the agent can act on failures without parsing raw test logs.
+
+Modes:
+  full     — all packages (go test ./...)
+  changed  — only packages with Go changes vs --base (default: HEAD~1)
+  focused  — explicit --package list
+
+Exit codes:
+  0 — all tests passed
+  1 — one or more tests failed
+  2 — build/compilation error
+  3 — no tests found (changed mode with no Go changes, or focused with no matches)
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+# ── go test -json event types ──────────────────────────────────────────────
+# {"Action":"run|pause|cont|output|pass|fail|skip|bench","Package":"...","Test":"...","Elapsed":...}
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+
+
+@dataclass
+class TestResult:
+    package: str
+    test: str
+    action: str  # pass, fail, skip
+    elapsed: float
+    output: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PackageResult:
+    package: str
+    action: str  # pass, fail, skip
+    elapsed: float
+    tests: list[TestResult] = field(default_factory=list)
+    build_output: str = ""
+
+
+def find_changed_packages(base: str) -> list[str]:
+    """Return Go package import paths for directories with changed .go files."""
+    result = subprocess.run(
+        ["git", "diff", "--name-only", base, "HEAD"],
+        capture_output=True, text=True, cwd=PROJECT_ROOT,
+    )
+    if result.returncode != 0:
+        print(f"autotest: git diff failed — {result.stderr.strip()}", file=sys.stderr)
+        return []
+
+    changed_files = [f for f in result.stdout.strip().split("\n") if f.endswith(".go")]
+    if not changed_files:
+        return []
+
+    # Map changed files to Go packages
+    packages: set[str] = set()
+    module = _go_module()
+    for f in changed_files:
+        pkg_dir = str(Path(f).parent)
+        if pkg_dir == ".":
+            packages.add(module)
+        else:
+            packages.add(f"{module}/{pkg_dir}")
+
+    return sorted(packages)
+
+
+def _go_module() -> str:
+    """Read the Go module path from go.mod."""
+    go_mod = PROJECT_ROOT / "go.mod"
+    if go_mod.exists():
+        first = go_mod.read_text().split("\n")[0]
+        if first.startswith("module "):
+            return first.split()[1]
+    return ""
+
+
+def run_tests(packages: list[str], race: bool, count: int, verbose: bool, timeout: str) -> dict[str, Any]:
+    """Run go test -json on the given packages and return structured results."""
+    if not packages:
+        return {"packages": [], "summary": {"total": 0, "passed": 0, "failed": 0, "skipped": 0, "elapsed": 0.0}}
+
+    args = ["go", "test", "-json"]
+    if race:
+        args.append("-race")
+    if count > 1:
+        args.extend(["-count", str(count)])
+    if timeout:
+        args.extend(["-timeout", timeout])
+    args.extend(packages)
+
+    start = time.time()
+    proc = subprocess.run(args, capture_output=True, text=True, cwd=PROJECT_ROOT)
+
+    elapsed = time.time() - start
+
+    # Parse JSON events
+    packages_map: dict[str, PackageResult] = {}
+    current_pkg: str | None = None
+
+    for line in proc.stdout.strip().split("\n"):
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        pkg = event.get("Package", "")
+        if not pkg:
+            continue
+
+        action = event.get("Action", "")
+        test_name = event.get("Test", "")
+
+        if action == "start":
+            current_pkg = pkg
+
+        elif action in ("pass", "fail", "skip"):
+            if test_name:
+                # Individual test result
+                if pkg not in packages_map:
+                    packages_map[pkg] = PackageResult(package=pkg, action="pass", elapsed=0)
+                tr = TestResult(
+                    package=pkg,
+                    test=test_name,
+                    action=action,
+                    elapsed=event.get("Elapsed", 0),
+                )
+                packages_map[pkg].tests.append(tr)
+            else:
+                # Package-level result
+                if pkg not in packages_map:
+                    packages_map[pkg] = PackageResult(package=pkg, action=action, elapsed=event.get("Elapsed", 0))
+                else:
+                    packages_map[pkg].action = action
+                    packages_map[pkg].elapsed = event.get("Elapsed", 0)
+
+        elif action == "output" and test_name == "":
+            # Package-level output (build errors, etc.)
+            if pkg in packages_map:
+                packages_map[pkg].build_output += event.get("Output", "")
+
+    # Build summary
+    total = 0
+    passed = 0
+    failed = 0
+    skipped = 0
+    for pkg_result in packages_map.values():
+        for t in pkg_result.tests:
+            total += 1
+            if t.action == "pass":
+                passed += 1
+            elif t.action == "fail":
+                failed += 1
+            elif t.action == "skip":
+                skipped += 1
+
+    # Capture build errors from stderr
+    build_error = proc.stderr.strip() if proc.returncode != 0 and proc.stderr.strip() else ""
+
+    return {
+        "packages": [
+            {
+                "package": p.package,
+                "action": p.action,
+                "elapsed": p.elapsed,
+                "test_count": len(p.tests),
+                "tests": [
+                    {"name": t.test, "action": t.action, "elapsed": t.elapsed}
+                    for t in p.tests
+                ],
+            }
+            for p in sorted(packages_map.values(), key=lambda x: x.package)
+        ],
+        "summary": {
+            "total": total,
+            "passed": passed,
+            "failed": failed,
+            "skipped": skipped,
+            "elapsed": round(elapsed, 3),
+        },
+        "build_error": build_error,
+        "raw_returncode": proc.returncode,
+    }
+
+
+def print_json(results: dict[str, Any]) -> None:
+    print(json.dumps(results, indent=2))
+
+
+def print_human(results: dict[str, Any]) -> None:
+    summary = results["summary"]
+    print(f"\n{'='*60}")
+    print(f"  Test Results: {summary['total']} tests | "
+          f"{summary['passed']} passed | "
+          f"{summary['failed']} failed | "
+          f"{summary['skipped']} skipped | "
+          f"{summary['elapsed']:.2f}s")
+    print(f"{'='*60}")
+
+    if results["build_error"]:
+        print(f"\n  Build Error:\n{results['build_error']}")
+
+    for pkg in results["packages"]:
+        status = "✓" if pkg["action"] == "pass" else "✗" if pkg["action"] == "fail" else "○"
+        print(f"\n  {status} {pkg['package']} ({pkg['elapsed']:.2f}s, {pkg['test_count']} tests)")
+        for t in pkg["tests"]:
+            if t["action"] == "fail":
+                print(f"    ✗ {t['name']}")
+        if pkg["action"] == "fail" and not any(t["action"] == "fail" for t in pkg["tests"]):
+            print(f"    (build or package-level failure)")
+
+    print()
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="autotest",
+        description="Structured Go test runner for the Feedlot project.",
+    )
+    parser.add_argument(
+        "--mode", choices=("full", "changed", "focused"), default="full",
+        help="Test mode: full (all packages), changed (git diff), focused (--package).",
+    )
+    parser.add_argument(
+        "--base", default="HEAD~1",
+        help="Base ref for changed mode (default: HEAD~1).",
+    )
+    parser.add_argument(
+        "--package", action="append", dest="packages",
+        help="Package(s) for focused mode (repeatable).",
+    )
+    parser.add_argument(
+        "--race", action="store_true", default=True,
+        help="Enable race detector (default: on).",
+    )
+    parser.add_argument(
+        "--no-race", action="store_false", dest="race",
+        help="Disable race detector.",
+    )
+    parser.add_argument(
+        "--count", type=int, default=1,
+        help="Run count (default: 1).",
+    )
+    parser.add_argument(
+        "--timeout", default="",
+        help="Test timeout (e.g. 30s, 5m).",
+    )
+    parser.add_argument(
+        "--json", action="store_true", default=False,
+        help="Output structured JSON instead of human-readable.",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", default=False,
+        help="Show test output even on pass.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+
+    # Resolve packages
+    if args.mode == "focused":
+        if not args.packages:
+            print("autotest: --package is required for focused mode", file=sys.stderr)
+            return 1
+        packages = args.packages
+    elif args.mode == "changed":
+        packages = find_changed_packages(args.base)
+        if not packages:
+            print("autotest: no Go changes detected — nothing to test", file=sys.stderr)
+            return 3
+    else:
+        packages = ["./..."]
+
+    if args.verbose or args.json:
+        print(f"autotest: mode={args.mode} packages={packages} race={args.race}", file=sys.stderr)
+
+    # Run tests
+    results = run_tests(packages, race=args.race, count=args.count, verbose=args.verbose, timeout=args.timeout)
+
+    # Output
+    if args.json:
+        print_json(results)
+    else:
+        print_human(results)
+
+    # Exit code
+    summary = results["summary"]
+    if results["build_error"]:
+        return 2
+    if summary["failed"] > 0:
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

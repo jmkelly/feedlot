@@ -20,8 +20,8 @@ feedlot
 # Playwright MCP artifacts
 .playwright-mcp/
 
-# Pi skills (third-party)
-.pi/skills/
+# Pi skills
+# .pi/skills/ — committed (project-owned skills)
 
 # Review artifacts
 /doc/ui-ux-review.md
