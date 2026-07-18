@@ -83,14 +83,48 @@ func (h *Handler) ToggleRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Render the updated card (primary HTMX swap target)
+	// hx-target="closest .card" hx-swap="outerHTML" on the toggle button
 	data := map[string]any{
 		"Article": *article,
 	}
-
 	if err := articleCardTmpl.Execute(w, data); err != nil {
 		log.Printf("render article card: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
+
+	// Render the OOB feed sidebar with authoritative unread counts from the server.
+	// HTMX will process this as an out-of-band swap and update #feed-sidebar-inner,
+	// keeping unread badges in sync without any client-side arithmetic.
+	feeds, err := h.DB.GetUserFeeds(userID)
+	if err != nil {
+		log.Printf("get feeds for oob: %v", err)
+		return
+	}
+	feedData := map[string]any{
+		"Feeds": feeds,
+	}
+	if err := feedSidebarOOBTmpl.Execute(w, feedData); err != nil {
+		log.Printf("render feed sidebar oob: %v", err)
+	}
+}
+
+func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
+	userID := GetUserID(r)
+	idStr := chi.URLParam(r, "id")
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid article ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.DB.MarkArticleRead(id, userID); err != nil {
+		log.Printf("mark article read: %v", err)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 const articleCardTemplate = `

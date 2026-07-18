@@ -113,7 +113,6 @@ func (h *Handler) ListFeeds(w http.ResponseWriter, r *http.Request) {
 
 // ─── OPML Import ─────────────────────────────────────────────────────────
 
-// opmlDocument represents the root of an OPML 1.0/2.0 file.
 type opmlDocument struct {
 	XMLName xml.Name   `xml:"opml"`
 	Version string     `xml:"version,attr"`
@@ -144,7 +143,6 @@ type opmlFeedEntry struct {
 	SiteURL string
 }
 
-// parseOPML reads an OPML file and extracts all feed entries from nested outlines.
 func parseOPML(r io.Reader) ([]opmlFeedEntry, error) {
 	var doc opmlDocument
 	if err := xml.NewDecoder(r).Decode(&doc); err != nil {
@@ -156,7 +154,6 @@ func parseOPML(r io.Reader) ([]opmlFeedEntry, error) {
 	return entries, nil
 }
 
-// collectFeedEntries recursively flattens nested <outline> elements.
 func collectFeedEntries(outlines []opmlOutline, entries *[]opmlFeedEntry) {
 	for _, ol := range outlines {
 		if ol.XMLURL != "" {
@@ -179,7 +176,6 @@ func collectFeedEntries(outlines []opmlOutline, entries *[]opmlFeedEntry) {
 func (h *Handler) ImportOPML(w http.ResponseWriter, r *http.Request) {
 	userID := GetUserID(r)
 
-	// Max 10MB upload
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
 		return
@@ -204,7 +200,6 @@ func (h *Handler) ImportOPML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get existing user feeds to skip duplicates
 	existingFeeds, err := h.DB.GetUserFeeds(userID)
 	if err != nil {
 		log.Printf("get existing feeds: %v", err)
@@ -230,7 +225,6 @@ func (h *Handler) ImportOPML(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Use OPML title if available (often more descriptive), fall back to fetched title
 		if entry.Title != "" {
 			result.Feed.Title = entry.Title
 		}
@@ -244,7 +238,6 @@ func (h *Handler) ImportOPML(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Store articles from the fetched feed
 		for _, article := range result.Articles {
 			article.FeedID = feed.ID
 			if _, err := h.DB.CreateArticle(article); err != nil {
@@ -261,7 +254,6 @@ func (h *Handler) ImportOPML(w http.ResponseWriter, r *http.Request) {
 		log.Printf("  OPML import error: %s", e)
 	}
 
-	// Re-render the feed list sidebar
 	h.ListFeeds(w, r)
 }
 
@@ -279,7 +271,6 @@ func (h *Handler) AddFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if feed already exists for this user
 	userFeeds, err := h.DB.GetUserFeeds(userID)
 	if err != nil {
 		log.Printf("get user feeds: %v", err)
@@ -291,7 +282,6 @@ func (h *Handler) AddFeed(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Fetch feed to get metadata
 	result, err := feeds.FetchFeed(feedURL, userID)
 	if err != nil {
 		log.Printf("fetch feed %s: %v", feedURL, err)
@@ -299,7 +289,6 @@ func (h *Handler) AddFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create feed in database
 	feed, err := h.DB.CreateFeed(result.Feed)
 	if err != nil {
 		log.Printf("create feed: %v", err)
@@ -307,18 +296,15 @@ func (h *Handler) AddFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Store new articles
 	for _, article := range result.Articles {
 		article.FeedID = feed.ID
 		_, err := h.DB.CreateArticle(article)
 		if err != nil {
-			// Skip duplicates (GUID constraint)
 			log.Printf("skip article (likely duplicate): %v", err)
 			continue
 		}
 	}
 
-	// Return the updated feed list
 	h.ListFeeds(w, r)
 }
 
@@ -338,7 +324,6 @@ func (h *Handler) RemoveFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return empty response (HTMX will remove the element)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -359,7 +344,6 @@ func (h *Handler) RefreshFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch new articles
 	result, err := feeds.FetchFeed(feed.FeedURL, userID)
 	if err != nil {
 		log.Printf("fetch feed %s: %v", feed.FeedURL, err)
@@ -367,14 +351,10 @@ func (h *Handler) RefreshFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user settings for AI provider
 	settings, err := h.DB.GetUserSettings(userID)
 	if err != nil {
 		log.Printf("get user settings: %v", err)
 	}
-
-	// Count new articles
-	newCount := 0
 
 	for _, article := range result.Articles {
 		article.FeedID = feedID
@@ -384,9 +364,7 @@ func (h *Handler) RefreshFeed(w http.ResponseWriter, r *http.Request) {
 			log.Printf("skip article during refresh (likely duplicate): %v", err)
 			continue
 		}
-		newCount++
 
-		// Run AI summarization on new articles with content
 		if stored.Content != nil && *stored.Content != "" {
 			summary, err := summarizer.Summarize(h.buildSummaryRequest(settings, *stored.Content))
 			if err != nil {
@@ -400,10 +378,8 @@ func (h *Handler) RefreshFeed(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Update last fetched time
 	_ = h.DB.UpdateFeedLastFetched(feedID, time.Now())
 
-	// Return article list
 	h.ListArticlesByFeed(w, r)
 }
 
@@ -457,12 +433,11 @@ func (h *Handler) buildSummaryRequest(settings *model.UserSettings, content stri
 			req.BaseURL = *settings.BaseURL
 		}
 		if settings.APIKeyEncrypted != nil {
-			// Decrypt if encryption key is configured
 			if h.EncryptionKey != "" {
 				decrypted, err := Decrypt(*settings.APIKeyEncrypted, []byte(h.EncryptionKey))
 				if err != nil {
 					log.Printf("decrypt API key: %v", err)
-					req.APIKey = *settings.APIKeyEncrypted // fallback to stored value
+					req.APIKey = *settings.APIKeyEncrypted
 				} else {
 					req.APIKey = string(decrypted)
 				}
@@ -484,29 +459,11 @@ func (h *Handler) buildSummaryRequest(settings *model.UserSettings, content stri
 		}
 	}
 
-	// Fallback to global OpenCode Go key if user hasn't set one
 	if req.APIKey == "" && req.Provider == "opencode-go" && h.OpenCodeGoKey != "" {
 		req.APIKey = h.OpenCodeGoKey
 	}
 
 	return req
-}
-
-func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
-	userID := GetUserID(r)
-	idStr := chi.URLParam(r, "id")
-	
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid article ID", http.StatusBadRequest)
-		return
-	}
-	
-	if err := h.DB.MarkArticleRead(id, userID); err != nil {
-		log.Printf("mark article read: %v", err)
-	}
-	
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // ─── Inline Templates ──────────────────────────────────────────────────────
@@ -556,7 +513,7 @@ const dashboardTemplate = `
 
   <main class="layout">
     <aside id="feed-sidebar" class="sidebar">
-      <div class="panel" hx-get="/feeds" hx-trigger="load" hx-target="#feed-sidebar-inner">
+      <div class="panel">
         <div id="feed-sidebar-inner">
           <div class="panel__head"><span class="panel__title"><b>≡</b> Pen</span></div>
           {{range .Feeds}}
@@ -635,6 +592,49 @@ const dashboardTemplate = `
 const feedListTemplate = `
 <div class="panel">
   <div class="panel__head"><span class="panel__title"><b>≡</b> Pen</span></div>
+  {{range .Feeds}}
+  <div class="feed" data-feed-id="{{.ID}}">
+    <a href="/?feed_id={{.ID}}" class="feed__row"
+       hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
+       hx-indicator="#loading">
+      <span class="feed__title">{{.Title}}</span>
+      {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
+    </a>
+    <div class="feed__tools">
+      <button hx-post="/feeds/{{.ID}}/refresh" hx-target="#article-list" hx-indicator="#loading" class="tool" title="Refresh">↻</button>
+      <button hx-delete="/feeds/{{.ID}}" hx-target="closest .feed" hx-swap="outerHTML swap:0.3s"
+        hx-confirm="Remove this feed?" class="tool tool--del" title="Remove">✕</button>
+    </div>
+  </div>
+  {{else}}
+  <div class="empty">
+    <p class="empty__t">No feeds yet</p>
+    <p class="empty__s">Add one below</p>
+  </div>
+  {{end}}
+  <div class="add-feed">
+    <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
+      <input type="url" name="url" placeholder="RSS / Atom URL" required class="input">
+      <button type="submit" class="btn btn--primary btn--mini">Add</button>
+    </form>
+  </div>
+  <div class="add-feed add-feed--opml">
+    <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data">
+      <label class="label-mono">Import OPML</label>
+      <div class="flex gap-2">
+        <input type="file" name="opml_file" accept=".opml,.xml" required class="file">
+        <button type="submit" class="btn btn--ghost btn--mini">Import</button>
+      </div>
+    </form>
+  </div>
+</div>
+`
+
+// feedSidebarOOBTemplate renders just the feed list items wrapped in an hx-swap-oob div.
+// Used by ToggleRead to return authoritative unread counts alongside the card swap,
+// keeping sidebar badges in sync without any client-side arithmetic.
+const feedSidebarOOBTemplate = `
+<div id="feed-sidebar-inner" hx-swap-oob="true">
   {{range .Feeds}}
   <div class="feed" data-feed-id="{{.ID}}">
     <a href="/?feed_id={{.ID}}" class="feed__row"

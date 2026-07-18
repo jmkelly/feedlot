@@ -1,5 +1,7 @@
 // Feedlot — Custom JS enhancements
 // Scroll-past-mark-as-read, keyboard shortcuts, scroll progress, and UX polish.
+// Uses HTMX OOB (out-of-band) swaps for sidebar badge updates — the server
+// is the single source of truth for unread counts.
 
 (function() {
   'use strict';
@@ -7,7 +9,6 @@
   // ─── State ──────────────────────────────────────────────────────────
 
   const seenIds = new Set();
-  const toggleStateStore = new Map();
   let scrollObserver = null;
   let scrollMarkReadEnabled = localStorage.getItem('feedlot:scrollMarkRead') === 'true';
   let focusedArticleIndex = -1;
@@ -30,32 +31,13 @@
     return btn.getAttribute('title') === 'Mark read' || btn.textContent.trim() === '\u25CF';
   }
 
-  /** Adjust a feed's unread badge by a delta (-1 for marking read, +1 for marking unread) */
-  function adjustFeedBadge(feedId, delta) {
-    if (!feedId) return;
-    var feedItem = document.querySelector('.feed[data-feed-id="' + feedId + '"]');
-    if (!feedItem) return;
-    var badge = feedItem.querySelector('.ear-tag');
-    if (badge) {
-      var count = parseInt(badge.textContent.trim(), 10);
-      if (!isNaN(count)) {
-        count += delta;
-        if (count <= 0) {
-          badge.remove();
-        } else {
-          badge.textContent = count;
-        }
-      }
-    }
-  }
-
-  /** Mark a single card as read: POST, update classes, decrement badge */
+  /** Mark a single card as read: POST, update classes, trigger sidebar refresh */
   function markCardRead(card) {
     var id = getArticleId(card);
     if (!id || seenIds.has(id)) return;
     seenIds.add(id);
 
-    // POST to backend
+    // POST to backend (MarkRead handler returns 204, no OOB needed)
     fetch('/articles/' + id + '/read', { method: 'POST' })['catch'](function() {});
 
     // Update card UI
@@ -65,9 +47,6 @@
     setTimeout(function() {
       card.classList.remove('is-marked');
     }, 800);
-
-    // Decrement matching feed badge
-    adjustFeedBadge(card.getAttribute('data-feed-id'), -1);
   }
 
   /** Find an article card by its ID */
@@ -77,6 +56,25 @@
       if (getArticleId(cards[i]) === id) return cards[i];
     }
     return null;
+  }
+
+  // ─── Sidebar refresh (for non-HTMX operations) ─────────────────────
+
+  /** Refresh the feed sidebar from the server for authoritative unread counts */
+  function refreshFeedSidebar() {
+    if (typeof htmx !== 'undefined' && htmx.ajax) {
+      htmx.ajax('GET', '/feeds', { target: '#feed-sidebar-inner', swap: 'innerHTML' });
+    }
+  }
+
+  // Debounced sidebar refresh for bulk/fetch-based operations
+  var _sidebarRefreshTimer = null;
+  function debouncedRefreshSidebar() {
+    if (_sidebarRefreshTimer) clearTimeout(_sidebarRefreshTimer);
+    _sidebarRefreshTimer = setTimeout(function() {
+      refreshFeedSidebar();
+      _sidebarRefreshTimer = null;
+    }, 400);
   }
 
   // ─── IntersectionObserver: scroll-past-mark-as-read ────────────────
@@ -101,6 +99,7 @@
             card._readTimer = setTimeout(function() {
               if (document.contains(card) && isUnreadCard(card) && !seenIds.has(getArticleId(card))) {
                 markCardRead(card);
+                debouncedRefreshSidebar();
               }
               card._readTimer = null;
             }, 500);
@@ -114,6 +113,7 @@
           // If top edge is above the viewport, mark immediately
           if (entry.boundingClientRect.top < 0) {
             markCardRead(card);
+            debouncedRefreshSidebar();
           }
         }
       });
@@ -206,7 +206,11 @@
     if (ids.length === 0) return;
 
     function postNext(i) {
-      if (i >= ids.length) return;
+      if (i >= ids.length) {
+        // All done — refresh sidebar from server for authoritative counts
+        refreshFeedSidebar();
+        return;
+      }
       fetch('/articles/' + ids[i] + '/read', { method: 'POST' })
         .then(function() {
           var card = findCardById(ids[i]);
@@ -215,7 +219,6 @@
             card.classList.remove('is-unread');
             card.classList.add('is-marked');
             setTimeout(function() { card.classList.remove('is-marked'); }, 800);
-            adjustFeedBadge(card.getAttribute('data-feed-id'), -1);
           }
           postNext(i + 1);
         })
@@ -428,44 +431,14 @@
 
   // ─── HTMX Event Handlers ───────────────────────────────────────────
 
-  // After any HTMX swap, reset state and re-wire controls/cards
+  // After any HTMX swap, reset state and re-wire controls/cards.
+  // Sidebar badge updates are handled by the server via hx-swap-oob
+  // in the ToggleRead response — no client-side arithmetic needed.
   document.addEventListener('htmx:afterSwap', function(e) {
     focusedArticleIndex = -1;
     seenIds.clear();
     wireControls();
     rescanCards();
-
-    // Apply pending sidebar badge adjustments from toggle operations
-    toggleStateStore.forEach(function(state) {
-      adjustFeedBadge(state.feedId, state.delta);
-    });
-    toggleStateStore.clear();
-  });
-
-  // Capture toggle state so we can update sidebar badges after the swap
-  document.addEventListener('htmx:beforeRequest', function(e) {
-    var trigger = e.detail.elt;
-    if (!trigger) return;
-    var post = trigger.getAttribute('hx-post') || '';
-
-    // Feed refresh loading animation
-    if (post.indexOf('/refresh') !== -1) {
-      trigger.textContent = '⟳';
-      trigger.style.animation = 'spin 1s linear infinite';
-      return;
-    }
-
-    // Track toggle-before state for sidebar badge adjustment
-    var match = post.match(/\/articles\/(\d+)\/toggle/);
-    if (!match) return;
-    var articleId = match[1];
-    var card = trigger.closest('.card');
-    if (!card) return;
-    var wasUnread = trigger.getAttribute('title') === 'Mark read';
-    toggleStateStore.set(articleId, {
-      feedId: card.getAttribute('data-feed-id'),
-      delta: wasUnread ? -1 : 1
-    });
   });
 
   document.addEventListener('htmx:afterRequest', function(e) {

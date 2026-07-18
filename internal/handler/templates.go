@@ -27,6 +27,15 @@ var (
 		},
 	}).Parse(feedListTemplate))
 
+	feedSidebarOOBTmpl = template.Must(template.New("feed-sidebar-oob").Funcs(template.FuncMap{
+		"deref": func(s *string) string {
+			if s == nil {
+				return ""
+			}
+			return *s
+		},
+	}).Parse(feedSidebarOOBTemplate))
+
 	articleListTmpl = template.Must(template.New("article-list").Funcs(template.FuncMap{
 		"deref": func(s *string) string {
 			if s == nil {
