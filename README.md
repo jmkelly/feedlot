@@ -1,121 +1,162 @@
-# Feedlot 🐄📡
+# 🐄 Feedlot
 
-> *A blog feed reader that chews up articles and spits out summaries.*
+> *A self-hosted RSS/Atom feed reader with AI-powered summarization.*
 
-Feedlot is a custom-built, self-hosted blog feed reader with AI-powered summarization. Subscribe to RSS/Atom feeds, and Feedlot will fetch full articles, run them through your choice of an OpenAI-compatible AI model, and serve you short, digestible summaries — so you can scan dozens of posts in seconds without leaving the trough.
+**Feedlot** subscribes to your favourite blogs, fetches full articles, and runs them through an LLM to generate short, digestible summaries. Scan dozens of posts in seconds — without ever leaving the trough.
 
-## Concept
-
-- **Feed subscription** — Subscribe to any RSS or Atom feed. Feedlot fetches and stores the full article content.
-- **AI summarization** — On ingest, each article is passed through an LLM (OpenAI, Anthropic via API, local Ollama, or any OpenAI-compatible endpoint) to generate a concise, readable summary. Think RAG-light: the model gets the full article text and returns a title-grade summary.
-- **Read/unread tracking** — Posts can be toggled between read and unread with minimal friction (one click, keypress, or swipe). Designed for rapid scanning.
-- **Authentication** — Simple email + password login to keep your feed private.
-- **Settings page** — Configure your AI provider, API key, model name, base URL, summary length, and other preferences.
-
-## Why "Feedlot"?
-
-Because it's a place where feeds get fattened up before they reach you. And because the name is a little weird, a little funny, and just relevant enough.
-
-## Language / Framework Suggestions
-
-Not sure what to build this in? Here are three solid options, each with a different trade-off:
-
-### 1. Python + FastAPI + HTMX + SQLite
-
-| Layer | Choice |
-|-------|--------|
-| Backend | FastAPI (Python) |
-| Frontend | HTMX + Tailwind CSS (minimal JS) |
-| Database | SQLite (via SQLAlchemy) |
-| Auth | FastAPI users + JWT |
-| Feed parsing | feedparser |
-| AI calls | httpx / openai Python library |
-
-**Best for:** Rapid prototyping, solo dev, low operational complexity. Python has the richest AI/LLM ecosystem (LangChain, LlamaIndex, direct OpenAI SDK). HTMX keeps the frontend simple without a JS framework — perfect for fast read/unread toggling with zero page reloads. SQLite means zero infrastructure.
-
-**Trade-off:** Not the best for massive scale (tens of thousands of feeds) or real-time concurrency, but for a personal/private reader it's ideal.
+<p align="center">
+  <img src="screenshots/03-dashboard.png" alt="Feedlot dashboard" width="800" />
+</p>
 
 ---
 
-### 2. Go + Templ + SQLite + LiteStream
+## ✨ Features
 
-| Layer | Choice |
-|-------|--------|
-| Backend | Go (Chi or Gin router) |
-| Frontend | Templ (type-safe HTML templates) + HTMX + Tailwind |
-| Database | SQLite (via modernc.org/sqlite or mattn/go-sqlite3) |
-| Auth | bcrypt + JWT, or plug in something like PocketBase |
-| Feed parsing | gofeed |
-| AI calls | net/http + custom OpenAI-compatible client |
-
-**Best for:** Single binary deployment, performance, and long-term maintainability. Go compiles to a tiny static binary — deploy anywhere with no dependencies. Templ gives you type-safe HTML templates with Go. HTMX keeps interactivity snappy.
-
-**Trade-off:** Fewer AI libraries — you'll write more HTTP plumbing for LLM calls. Less ecosystem than Python, but the result is a rock-solid, fast, minimal-dependency app.
-
----
-
-### 3. TypeScript + Next.js (or SvelteKit) + SQLite (via Turso/LibSQL)
-
-| Layer | Choice |
-|-------|--------|
-| Backend | Next.js API routes or SvelteKit |
-| Frontend | React (Next.js) or Svelte (SvelteKit) |
-| Database | Turso (LibSQL, edge-compatible SQLite) or better-sqlite3 |
-| Auth | NextAuth.js / Lucia Auth |
-| Feed parsing | rss-parser |
-| AI calls | Vercel AI SDK or openai npm package |
-
-**Best for:** Full-stack in one language, modern DX, potential edge deployment. One language (TypeScript) for frontend and backend. Next.js can deploy to Vercel's edge network. SvelteKit is lighter and more performant for reactive UIs like read/unread toggling.
-
-**Trade-off:** More JavaScript tooling complexity. Node.js background tasks (feed polling) require extra setup (cron jobs, or in-process with BullMQ). The AI SDK integration is nice, but you're tied to a heavier dependency tree.
+- **📡 RSS & Atom feeds** — Subscribe to any feed. Feedlot fetches full article content on ingest and keeps polling in the background.
+- **🤖 AI summarization** — Articles are passed through your choice of LLM (OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint) for concise, readable summaries.
+- **✅ Read/unread tracking** — One-click toggling with zero page reloads via HTMX. Mark individual articles or bulk-toggle at the feed level.
+- **🌗 Dark mode** — System-aware dark/light theme toggle.
+- **📱 Mobile responsive** — Full UI works on phones, tablets, and desktops.
+- **📂 OPML import** — Bring your existing subscriptions over in one click.
+- **🔐 Simple auth** — Email + password login keeps your feeds private.
+- **⚙️ Configurable AI** — Choose provider, model, base URL, summary length, and language from the Settings page.
+- **🧪 Test connection** — Verify your AI provider credentials right from Settings.
+- **🗄️ Admin logs** — Built-in log viewer for debugging feed fetches and AI calls.
+- **🐳 Single binary** — Compiles to a ~19 MB static binary. Deploy anywhere.
 
 ---
 
-### Summary
+## 📸 Screenshots
 
-| | Python | Go | TypeScript |
-|---|---|---|---|
-| **Prototyping speed** | ⚡⚡⚡ | ⚡⚡ | ⚡⚡ |
-| **Performance** | 🐌 | 🚀 | 🚀 (edge) |
-| **Deployment ease** | ⚡ (Docker) | ⚡⚡⚡ (binary) | ⚡⚡ (Node) |
-| **AI ecosystem** | 🏆 best | 🟢 decent | 🟢 good |
-| **Single dependency?** | Needs Python runtime | Static binary 🏆 | Needs Node |
-| **Read/unread UX** | HTMX does the heavy lifting | HTMX + Templ | Native reactive (Svelte) |
+| | | |
+|:---:|:---:|:---:|
+| ![Login](screenshots/01-login.png) | ![Register](screenshots/02-register.png) | ![Dashboard](screenshots/03-dashboard.png) |
+| **Login** | **Register** | **Dashboard** |
+| ![Summarizing](screenshots/04-summarizing.png) | ![Settings](screenshots/05-settings.png) | ![Test Connection](screenshots/06-test-connection.png) |
+| **AI Summarizing** | **Settings** | **Test Connection** |
+| ![Dark Mode](screenshots/07-dark-mode.png) | ![Feed Filter](screenshots/08-feed-filter.png) | ![Mobile](screenshots/09-mobile.png) |
+| **Dark Mode** | **Feed Filter** | **Mobile** |
+| ![Mobile Articles](screenshots/10-mobile-articles.png) | ![Admin Logs](screenshots/11-admin-logs.png) | |
+| **Mobile Articles** | **Admin Logs** | |
 
-**My personal pick:** If you want to ship fast and have the richest AI tooling, go **Python + FastAPI + HTMX**. If you want a forever-binary you can deploy on a $5 VPS and forget about, go **Go + Templ + HTMX**. If you want a polished reactive UI and don't mind the JS toolchain, go **SvelteKit** (TypeScript).
+---
 
-## Getting Started
+## 🧱 Tech Stack
+
+| Layer | Choice |
+|-------|--------|
+| Language | **Go 1.25** |
+| Router | [Chi](https://github.com/go-chi/chi) |
+| Database | **SQLite** (via [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) + [sqlx](https://github.com/jmoiron/sqlx)) |
+| Frontend | **HTML templates** + [HTMX](https://htmx.org/) + custom CSS |
+| Auth | bcrypt passwords + JWT sessions |
+| Feed parsing | [gofeed](https://github.com/mmcdole/gofeed) |
+| AI calls | `net/http` — works with any OpenAI-compatible API |
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
-- Go 1.25+
-- SQLite
 
-### Run locally
+- **Go 1.25+**
+- **SQLite** (no separate install needed — uses CGo SQLite driver)
+
+### Quick start
 
 ```bash
+# Clone the repo
+git clone https://github.com/james/feedlot.git
+cd feedlot
+
+# Build
 go build -o feedlot .
+
+# Run (generates random secrets for you)
 FEEDLOT_JWT_SECRET="$(openssl rand -hex 32)" \
   FEEDLOT_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
   ./feedlot
 ```
 
-The server starts on port 8080 by default. Set `FEEDLOT_PORT` to change it.
+The server starts on **port 8080** by default. Open [http://localhost:8080](http://localhost:8080) and register an account.
+
+### Environment variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `FEEDLOT_PORT` | No | `8080` | HTTP listen port |
+| `FEEDLOT_DB_PATH` | No | `./feedlot.db` | SQLite database path |
+| `FEEDLOT_JWT_SECRET` | **Yes** | — | Secret for signing JWT tokens |
+| `FEEDLOT_ENCRYPTION_KEY` | No | — | 32-byte hex key for encrypting API keys at rest |
+| `FEEDLOT_REFRESH_INTERVAL` | No | `30m` | How often to poll feeds in background |
+| `FEEDLOT_OPENCODE_GO_KEY` | No | — | Default API key for the built-in OpenCode Go provider (set in `.env`) |
+
+Use a `.env` file in the project root to avoid typing these every time:
+
+```bash
+FEEDLOT_JWT_SECRET=<your random secret>
+FEEDLOT_ENCRYPTION_KEY=<your random encryption key>
+FEEDLOT_PORT=8090
+```
 
 ### Test account
 
-If the database already has a test user, you can sign in with:
+If the database ships with a test user, sign in with:
 
 | Field | Value |
 |-------|-------|
 | Email | `test@example.com` |
 | Password | `feedlot123` |
 
-To create this account on a fresh database, just register from the login page.
-
-### Access from other devices
-
-Feedlot listens on all interfaces (`0.0.0.0`), so you can reach it from other devices on your LAN at `http://<your-ip>:8080`. Find your IP with `hostname -I`.
+Otherwise, just **register** from the login page — it takes two seconds.
 
 ---
 
-*Feedlot — fattening your brain, one feed at a time.*
+## 🧠 How summarization works
+
+1. Feedlot fetches the RSS/Atom feed and stores the full article content.
+2. A background goroutine picks up un-summarized articles and sends the text to your configured LLM.
+3. The LLM returns a short summary, stored alongside the article.
+4. The dashboard shows the summary inline — no need to open the full article.
+
+You can also trigger summarization manually per-article with the **"Summarize"** button, or bulk-re-summarize.
+
+### Supported AI providers
+
+Any OpenAI-compatible endpoint works. Tested with:
+
+- **OpenAI** (GPT-4o, GPT-4o-mini)
+- **Anthropic** (via OpenAI-compatible proxies)
+- **Ollama** (local, e.g. `http://localhost:11434/v1`)
+- **OpenCode Go** (built-in default)
+- Any other provider exposing a `/v1/chat/completions` endpoint
+
+Configure provider, API key (encrypted at rest), model, base URL, summary length, and summary language in **Settings**.
+
+---
+
+## 📁 Project structure
+
+```
+feedlot/
+├── main.go                  # Entry point, router, migrations
+├── internal/
+│   ├── ai/                  # LLM summarization client
+│   ├── auth/                # JWT + bcrypt auth
+│   ├── db/                  # SQLite database layer
+│   ├── feeds/               # RSS/Atom fetcher & background refresher
+│   ├── handler/             # HTTP handlers & HTML templates
+│   └── model/               # Data models & user settings
+├── static/
+│   ├── css/app.css          # Application styles (light + dark)
+│   ├── js/app.js            # Minimal vanilla JS
+│   └── favicon.svg          # Cow favicon
+├── migrations/              # SQL migration files
+└── screenshots/             # Screenshots for docs
+```
+
+---
+
+## 📄 License
+
+MIT — do whatever you want. Feed your brain.
