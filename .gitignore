@@ -27,3 +27,5 @@ feedlot
 /doc/ui-ux-review.md
 /review-*.png
 /scripts/
+# Ghostchrome / playwright-cli page snapshots
+.playwright-cli/
