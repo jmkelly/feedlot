@@ -1,0 +1,174 @@
+- navigation:
+  - text: "🐄"
+  - text: "Feedlot"
+  - text: "FIELD STATION"
+  - button "Toggle light/dark theme" [ref=e1]
+    - text: "☾"
+  - button "AUTO-READ" [ref=e2]
+    - text: "AUTO-READ"
+  - button "Mark read" [ref=e3]
+    - text: "Mark read"
+  - text: "NOT CONFIGURED"
+  - link "Settings" [ref=e4]
+    - text: "Settings"
+  - link "Admin" [ref=e5]
+    - text: "Admin"
+  - button "Keyboard shortcuts" [ref=e6]
+    - text: "?"
+  - form:
+    - button "Log out" [ref=e7]
+      - text: "Log out"
+- main:
+  - complementary:
+    - text: "≡"
+    - text: "PEN"
+    - form:
+      - textbox "RSS / Atom URL" [ref=e8]
+      - button "Add" [ref=e9]
+        - text: "Add"
+    - link "All articles" [ref=e10]
+      - text: "All articles"
+    - link "UITest Long Reads 8" [ref=e11]
+      - text: "UITest Long Reads"
+      - text: "8"
+    - form:
+      - textbox "RSS / Atom URL" [ref=e12]
+      - button "Add" [ref=e13]
+        - text: "Add"
+    - form:
+      - text: "IMPORT OPML"
+      - button "Choose file" [ref=e14]
+      - button "Import" [ref=e15]
+        - text: "Import"
+  - link "ALL" [ref=e16]
+    - text: "ALL"
+  - link "UNREAD" [ref=e17]
+    - text: "UNREAD"
+  - heading "UI Test Article 1: a title long enough to wrap onto a second line and stay readable" [level=3]
+    - link "UI Test Article 1: a title long enough to wrap onto a second line and stay readable" [ref=e18]
+      - text: "UI Test Article 1: a title long enough to wrap onto a second line and stay readable"
+  - text: "Test Author"
+  - text: "·"
+  - text: "just now"
+  - link "UITest Long Reads" [ref=e19]
+    - text: "UITest Long Reads"
+  - paragraph:
+    - text: "This is a deliberately long AI summary used to exercise the full-summary modal in the feedlot UI. It covers the article's core thesis, the methodology the authors used to reach their conclusions, and why the findings matter for practitioners working in this space. The first section walks through the background and related work, situating the contribution against a decade of prior research that mostly focused on narrower questions. The second section describes the experimental setup in detail, including the dataset construction, the evaluation metrics chosen, and the ablations run to isolate the effect of each component. The third section reports the headline results: a meaningful improvement over the previous state of the art across all four benchmarks, with particularly strong gains on the long-tail categories that earlier systems struggled with. The fourth section discusses limitations, including the compute budget required to reproduce the results and the narrowness of the domain coverage. Finally, the authors sketch future directions, suggesting that the approach could generalise to multimodal inputs and to streaming settings where latency matters more than raw accuracy. Taken together, the paper makes a solid, incremental contribution that practitioners should read before designing their next system, and the open-source release accompanying the paper makes reproduction straightforward for anyone with a modest GPU budget."
+  - button "Show full summary" [ref=e20]
+    - text: "⤢"
+  - button "✦" [ref=e21]
+    - text: "✦"
+  - button "●" [ref=e22]
+    - text: "●"
+  - heading "UI Test Article 2: a title long enough to wrap onto a second line and stay readable" [level=3]
+    - link "UI Test Article 2: a title long enough to wrap onto a second line and stay readable" [ref=e23]
+      - text: "UI Test Article 2: a title long enough to wrap onto a second line and stay readable"
+  - text: "Test Author"
+  - text: "·"
+  - text: "just now"
+  - link "UITest Long Reads" [ref=e24]
+    - text: "UITest Long Reads"
+  - paragraph:
+    - text: "This is a deliberately long AI summary used to exercise the full-summary modal in the feedlot UI. It covers the article's core thesis, the methodology the authors used to reach their conclusions, and why the findings matter for practitioners working in this space. The first section walks through the background and related work, situating the contribution against a decade of prior research that mostly focused on narrower questions. The second section describes the experimental setup in detail, including the dataset construction, the evaluation metrics chosen, and the ablations run to isolate the effect of each component. The third section reports the headline results: a meaningful improvement over the previous state of the art across all four benchmarks, with particularly strong gains on the long-tail categories that earlier systems struggled with. The fourth section discusses limitations, including the compute budget required to reproduce the results and the narrowness of the domain coverage. Finally, the authors sketch future directions, suggesting that the approach could generalise to multimodal inputs and to streaming settings where latency matters more than raw accuracy. Taken together, the paper makes a solid, incremental contribution that practitioners should read before designing their next system, and the open-source release accompanying the paper makes reproduction straightforward for anyone with a modest GPU budget."
+  - button "Show full summary" [ref=e25]
+    - text: "⤢"
+  - button "✦" [ref=e26]
+    - text: "✦"
+  - button "●" [ref=e27]
+    - text: "●"
+  - heading "UI Test Article 3: a title long enough to wrap onto a second line and stay readable" [level=3]
+    - link "UI Test Article 3: a title long enough to wrap onto a second line and stay readable" [ref=e28]
+      - text: "UI Test Article 3: a title long enough to wrap onto a second line and stay readable"
+  - text: "Test Author"
+  - text: "·"
+  - text: "just now"
+  - link "UITest Long Reads" [ref=e29]
+    - text: "UITest Long Reads"
+  - paragraph:
+    - text: "This is a deliberately long AI summary used to exercise the full-summary modal in the feedlot UI. It covers the article's core thesis, the methodology the authors used to reach their conclusions, and why the findings matter for practitioners working in this space. The first section walks through the background and related work, situating the contribution against a decade of prior research that mostly focused on narrower questions. The second section describes the experimental setup in detail, including the dataset construction, the evaluation metrics chosen, and the ablations run to isolate the effect of each component. The third section reports the headline results: a meaningful improvement over the previous state of the art across all four benchmarks, with particularly strong gains on the long-tail categories that earlier systems struggled with. The fourth section discusses limitations, including the compute budget required to reproduce the results and the narrowness of the domain coverage. Finally, the authors sketch future directions, suggesting that the approach could generalise to multimodal inputs and to streaming settings where latency matters more than raw accuracy. Taken together, the paper makes a solid, incremental contribution that practitioners should read before designing their next system, and the open-source release accompanying the paper makes reproduction straightforward for anyone with a modest GPU budget."
+  - button "Show full summary" [ref=e30]
+    - text: "⤢"
+  - button "✦" [ref=e31]
+    - text: "✦"
+  - button "●" [ref=e32]
+    - text: "●"
+  - heading "UI Test Article 4: a title long enough to wrap onto a second line and stay readable" [level=3]
+    - link "UI Test Article 4: a title long enough to wrap onto a second line and stay readable" [ref=e33]
+      - text: "UI Test Article 4: a title long enough to wrap onto a second line and stay readable"
+  - text: "Test Author"
+  - text: "·"
+  - text: "just now"
+  - link "UITest Long Reads" [ref=e34]
+    - text: "UITest Long Reads"
+  - paragraph:
+    - text: "This is a deliberately long AI summary used to exercise the full-summary modal in the feedlot UI. It covers the article's core thesis, the methodology the authors used to reach their conclusions, and why the findings matter for practitioners working in this space. The first section walks through the background and related work, situating the contribution against a decade of prior research that mostly focused on narrower questions. The second section describes the experimental setup in detail, including the dataset construction, the evaluation metrics chosen, and the ablations run to isolate the effect of each component. The third section reports the headline results: a meaningful improvement over the previous state of the art across all four benchmarks, with particularly strong gains on the long-tail categories that earlier systems struggled with. The fourth section discusses limitations, including the compute budget required to reproduce the results and the narrowness of the domain coverage. Finally, the authors sketch future directions, suggesting that the approach could generalise to multimodal inputs and to streaming settings where latency matters more than raw accuracy. Taken together, the paper makes a solid, incremental contribution that practitioners should read before designing their next system, and the open-source release accompanying the paper makes reproduction straightforward for anyone with a modest GPU budget."
+  - button "Show full summary" [ref=e35]
+    - text: "⤢"
+  - button "✦" [ref=e36]
+    - text: "✦"
+  - button "●" [ref=e37]
+    - text: "●"
+  - heading "UI Test Article 5: a title long enough to wrap onto a second line and stay readable" [level=3]
+    - link "UI Test Article 5: a title long enough to wrap onto a second line and stay readable" [ref=e38]
+      - text: "UI Test Article 5: a title long enough to wrap onto a second line and stay readable"
+  - text: "Test Author"
+  - text: "·"
+  - text: "just now"
+  - link "UITest Long Reads" [ref=e39]
+    - text: "UITest Long Reads"
+  - paragraph:
+    - text: "This is a deliberately long AI summary used to exercise the full-summary modal in the feedlot UI. It covers the article's core thesis, the methodology the authors used to reach their conclusions, and why the findings matter for practitioners working in this space. The first section walks through the background and related work, situating the contribution against a decade of prior research that mostly focused on narrower questions. The second section describes the experimental setup in detail, including the dataset construction, the evaluation metrics chosen, and the ablations run to isolate the effect of each component. The third section reports the headline results: a meaningful improvement over the previous state of the art across all four benchmarks, with particularly strong gains on the long-tail categories that earlier systems struggled with. The fourth section discusses limitations, including the compute budget required to reproduce the results and the narrowness of the domain coverage. Finally, the authors sketch future directions, suggesting that the approach could generalise to multimodal inputs and to streaming settings where latency matters more than raw accuracy. Taken together, the paper makes a solid, incremental contribution that practitioners should read before designing their next system, and the open-source release accompanying the paper makes reproduction straightforward for anyone with a modest GPU budget."
+  - button "Show full summary" [ref=e40]
+    - text: "⤢"
+  - button "✦" [ref=e41]
+    - text: "✦"
+  - button "●" [ref=e42]
+    - text: "●"
+  - heading "UI Test Article 6: a title long enough to wrap onto a second line and stay readable" [level=3]
+    - link "UI Test Article 6: a title long enough to wrap onto a second line and stay readable" [ref=e43]
+      - text: "UI Test Article 6: a title long enough to wrap onto a second line and stay readable"
+  - text: "Test Author"
+  - text: "·"
+  - text: "just now"
+  - link "UITest Long Reads" [ref=e44]
+    - text: "UITest Long Reads"
+  - paragraph:
+    - text: "This is a deliberately long AI summary used to exercise the full-summary modal in the feedlot UI. It covers the article's core thesis, the methodology the authors used to reach their conclusions, and why the findings matter for practitioners working in this space. The first section walks through the background and related work, situating the contribution against a decade of prior research that mostly focused on narrower questions. The second section describes the experimental setup in detail, including the dataset construction, the evaluation metrics chosen, and the ablations run to isolate the effect of each component. The third section reports the headline results: a meaningful improvement over the previous state of the art across all four benchmarks, with particularly strong gains on the long-tail categories that earlier systems struggled with. The fourth section discusses limitations, including the compute budget required to reproduce the results and the narrowness of the domain coverage. Finally, the authors sketch future directions, suggesting that the approach could generalise to multimodal inputs and to streaming settings where latency matters more than raw accuracy. Taken together, the paper makes a solid, incremental contribution that practitioners should read before designing their next system, and the open-source release accompanying the paper makes reproduction straightforward for anyone with a modest GPU budget."
+  - button "Show full summary" [ref=e45]
+    - text: "⤢"
+  - button "✦" [ref=e46]
+    - text: "✦"
+  - button "●" [ref=e47]
+    - text: "●"
+  - heading "UI Test Article 7: a title long enough to wrap onto a second line and stay readable" [level=3]
+    - link "UI Test Article 7: a title long enough to wrap onto a second line and stay readable" [ref=e48]
+      - text: "UI Test Article 7: a title long enough to wrap onto a second line and stay readable"
+  - text: "Test Author"
+  - text: "·"
+  - text: "just now"
+  - link "UITest Long Reads" [ref=e49]
+    - text: "UITest Long Reads"
+  - paragraph:
+    - text: "This is a deliberately long AI summary used to exercise the full-summary modal in the feedlot UI. It covers the article's core thesis, the methodology the authors used to reach their conclusions, and why the findings matter for practitioners working in this space. The first section walks through the background and related work, situating the contribution against a decade of prior research that mostly focused on narrower questions. The second section describes the experimental setup in detail, including the dataset construction, the evaluation metrics chosen, and the ablations run to isolate the effect of each component. The third section reports the headline results: a meaningful improvement over the previous state of the art across all four benchmarks, with particularly strong gains on the long-tail categories that earlier systems struggled with. The fourth section discusses limitations, including the compute budget required to reproduce the results and the narrowness of the domain coverage. Finally, the authors sketch future directions, suggesting that the approach could generalise to multimodal inputs and to streaming settings where latency matters more than raw accuracy. Taken together, the paper makes a solid, incremental contribution that practitioners should read before designing their next system, and the open-source release accompanying the paper makes reproduction straightforward for anyone with a modest GPU budget."
+  - button "Show full summary" [ref=e50]
+    - text: "⤢"
+  - button "✦" [ref=e51]
+    - text: "✦"
+  - button "●" [ref=e52]
+    - text: "●"
+  - heading "UI Test Article 8: a title long enough to wrap onto a second line and stay readable" [level=3]
+    - link "UI Test Article 8: a title long enough to wrap onto a second line and stay readable" [ref=e53]
+      - text: "UI Test Article 8: a title long enough to wrap onto a second line and stay readable"
+  - text: "Test Author"
+  - text: "·"
+  - text: "just now"
+  - link "UITest Long Reads" [ref=e54]
+    - text: "UITest Long Reads"
+  - paragraph:
+    - text: "A short summary that fits on one or two lines and should never show the expand badge."
+  - button "✦" [ref=e55]
+    - text: "✦"
+  - button "●" [ref=e56]
+    - text: "●"
+  - button "Load more articles" [ref=e57]
+    - text: "Load more articles"

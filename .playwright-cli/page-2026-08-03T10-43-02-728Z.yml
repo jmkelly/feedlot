@@ -1,0 +1,8 @@
+- heading "Feedlot" [level=1]
+- form:
+  - heading "Sign in" [level=2]
+  - textbox "EMAIL" [ref=e1]
+  - textbox "PASSWORD" [ref=e2]
+  - button "Show password" [ref=e3]
+  - button "Sign in" [ref=e4]
+  - link "Register" [ref=e5]
