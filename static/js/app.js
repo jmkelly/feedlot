@@ -606,8 +606,8 @@
   document.addEventListener('click', function(e) {
     var t = e.target;
     if (!(t instanceof Element)) return;
-    // Summary modal: backdrop click closes, truncated summary opens
-    if (t.closest('#summary-overlay') && !t.closest('.summary-modal')) { closeSummaryModal(); return; }
+    // Summary modal: close button or backdrop click closes, truncated summary opens
+    if (t.closest('#summary-overlay') && (t.closest('#summary-modal-close') || !t.closest('.summary-modal'))) { closeSummaryModal(); return; }
     var summaryWrap = t.closest('.card__summarywrap.is-expandable');
     if (summaryWrap) { openSummaryModal(summaryWrap); return; }
     if (t.closest('#theme-toggle')) { handleThemeToggle(); return; }
