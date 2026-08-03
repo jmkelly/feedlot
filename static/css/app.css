@@ -757,6 +757,58 @@ button.htmx-request { opacity: .65; cursor: wait; }
   overflow: hidden;
 }
 
+/* Full summary expand — wrap + cue (wired by app.js) */
+.card__summarywrap { position: relative; }
+
+.card__summarywrap.is-expandable .card__summary {
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+.card__summarywrap.is-expandable:hover .card__summary,
+.card__summarywrap.is-expandable:focus-within .card__summary { color: var(--accent); }
+
+.card__summary-cue {
+  position: absolute;
+  right: .1rem;
+  bottom: .05rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: .62rem;
+  line-height: 1;
+  color: var(--accent);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 120ms ease, background-color 150ms ease;
+}
+.card__summary-cue[hidden] { display: none; }
+@media (hover: hover) {
+  .card__summarywrap.is-expandable:hover .card__summary-cue,
+  .card__summarywrap.is-expandable:focus-within .card__summary-cue {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+/* Touch: the cue stays visible since hover is unreliable */
+@media (hover: none) {
+  .card__summarywrap.is-expandable .card__summary-cue {
+    opacity: .85;
+    pointer-events: auto;
+  }
+}
+.card__summary-cue:hover {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.12);
+}
+
 /* Read/unread toggle — the brand stamp */
 .card__actions {
   flex-shrink: 0;
@@ -1170,6 +1222,83 @@ kbd {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: 1px 1px 0 var(--shadow-soft);
+}
+
+/* ─── Full AI summary modal ──────────────────────────────────────── */
+
+.summary-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0,0,0,.45);
+  backdrop-filter: blur(2px);
+}
+.summary-overlay[hidden] { display: none; }
+
+.summary-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(42rem, 100%);
+  max-height: min(80vh, 42rem);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 6px 6px 0 var(--shadow-hard);
+}
+.summary-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.3rem .75rem;
+  border-bottom: 1px solid var(--line);
+}
+.summary-modal__head h3 {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: .64rem;
+  font-weight: 600;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.summary-modal__title {
+  margin: 0;
+  padding: 1rem 1.3rem 0;
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.summary-modal__feed {
+  margin: 0;
+  padding: .3rem 1.3rem 0;
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.summary-modal__feed[hidden] { display: none; }
+.summary-modal__body {
+  min-height: 0;
+  margin: 0;
+  padding: 1rem 1.3rem 1.3rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-family: var(--font-serif);
+  font-size: 1.08rem;
+  line-height: 1.65;
+  color: var(--ink);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .summary-modal { max-height: 85dvh; }
 }
 
 /* ─── Reduced motion ─────────────────────────────────────────────── */

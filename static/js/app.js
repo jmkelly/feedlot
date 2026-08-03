@@ -13,6 +13,7 @@
   let scrollMarkReadEnabled = localStorage.getItem('feedlot:scrollMarkRead') === 'true';
   let focusedArticleIndex = -1;
   let progressTicking = false;
+  let summaryOpener = null; // element to refocus when the summary modal closes
 
   // ─── Utility ────────────────────────────────────────────────────────
 
@@ -37,6 +38,20 @@
     if (!id || seenIds.has(id)) return;
     seenIds.add(id);
 
+    // Under the unread-only filter the server removes the card: MarkRead
+    // responds with empty content (the outerHTML swap drops the card) plus an
+    // OOB sidebar refresh, so the filtered view stays authoritative without
+    // any client-side DOM surgery.
+    if (isUnreadFilterActive() && typeof htmx !== 'undefined' && htmx.ajax) {
+      var qs = '?unread=1';
+      try {
+        var feedId = new URLSearchParams(window.location.search).get('feed_id');
+        if (feedId) qs += '&feed_id=' + encodeURIComponent(feedId);
+      } catch (e) {}
+      htmx.ajax('POST', '/articles/' + id + '/read' + qs, { target: card, swap: 'outerHTML' });
+      return;
+    }
+
     // POST to backend (MarkRead handler returns 204, no OOB needed)
     fetch('/articles/' + id + '/read', { method: 'POST' })['catch'](function(err) {
       console.error('Failed to mark article', id, 'read:', err);
@@ -60,12 +75,28 @@
     return null;
   }
 
+  /** True when the unread-only filter is active (URL contains unread=1) */
+  function isUnreadFilterActive() {
+    try {
+      return new URLSearchParams(window.location.search).get('unread') === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
   // ─── Sidebar refresh (for non-HTMX operations) ─────────────────────
 
   /** Refresh the feed sidebar from the server for authoritative unread counts */
   function refreshFeedSidebar() {
     if (typeof htmx !== 'undefined' && htmx.ajax) {
-      htmx.ajax('GET', '/feeds', { target: '#feed-sidebar-inner', swap: 'innerHTML' });
+      // Swap the whole aside (outerHTML) so the drawer markup — close button
+      // included — stays identical no matter which path re-renders it.
+      var qs = '';
+      try {
+        var feedId = new URLSearchParams(window.location.search).get('feed_id');
+        if (feedId) qs = '?feed_id=' + encodeURIComponent(feedId);
+      } catch (e) {}
+      htmx.ajax('GET', '/feeds' + qs, { target: '#feed-sidebar', swap: 'outerHTML' });
     }
   }
 
@@ -211,6 +242,11 @@
       if (i >= ids.length) {
         // All done — refresh sidebar from server for authoritative counts
         refreshFeedSidebar();
+        // Under the unread-only filter, re-render the stream from the server so
+        // every card just marked read disappears (and the empty state shows).
+        if (isUnreadFilterActive() && typeof htmx !== 'undefined' && htmx.ajax) {
+          htmx.ajax('GET', window.location.href, { target: '#article-list', swap: 'innerHTML' });
+        }
         return;
       }
       fetch('/articles/' + ids[i] + '/read', { method: 'POST' })
@@ -334,12 +370,15 @@
 
   // ─── Mobile sidebar drawer ────────────────────────────────────────
 
-  function toggleSidebar() {
+  function openSidebar() {
     var sidebar = document.getElementById('feed-sidebar');
     var overlay = document.getElementById('sidebar-overlay');
     if (!sidebar) return;
-    var isOpen = sidebar.classList.toggle('is-open');
-    if (overlay) overlay.classList.toggle('is-open', isOpen);
+    sidebar.classList.add('is-open');
+    if (overlay) overlay.classList.add('is-open');
+    // Lock the page behind the drawer so swiping always scrolls the drawer.
+    document.documentElement.classList.add('drawer-open');
+    document.body.classList.add('drawer-open');
   }
 
   function closeSidebar() {
@@ -347,7 +386,127 @@
     var overlay = document.getElementById('sidebar-overlay');
     if (sidebar) sidebar.classList.remove('is-open');
     if (overlay) overlay.classList.remove('is-open');
+    document.documentElement.classList.remove('drawer-open');
+    document.body.classList.remove('drawer-open');
   }
+
+  function toggleSidebar() {
+    var sidebar = document.getElementById('feed-sidebar');
+    if (!sidebar) return;
+    if (sidebar.classList.contains('is-open')) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  }
+
+  // ─── Full AI summary modal ─────────────────────────────────────────
+
+  // Card summaries are visually clamped to 6 lines, but the full text is
+  // already in the DOM — the modal shows it without a round trip. The wrap
+  // and expand badge are injected client-side so every card renderer
+  // (initial page, load-more, read/summarize swaps) gets them for free.
+
+  /** True when the summary is actually clipped by the 6-line clamp */
+  function isSummaryTruncated(el) {
+    return el.scrollHeight > el.clientHeight + 1;
+  }
+
+  /** Wrap each summary with an expand badge and track truncation state */
+  function wireSummaryExpand() {
+    document.querySelectorAll('.card__summary').forEach(function(el) {
+      if (el._feedlotSummaryWired) return;
+      el._feedlotSummaryWired = true;
+
+      var wrap = document.createElement('div');
+      wrap.className = 'card__summarywrap';
+      el.parentNode.insertBefore(wrap, el);
+      wrap.appendChild(el);
+
+      var badge = document.createElement('button');
+      badge.type = 'button';
+      badge.className = 'card__summary-cue';
+      badge.setAttribute('aria-label', 'Show full summary');
+      badge.setAttribute('aria-haspopup', 'dialog');
+      badge.textContent = '\u2922'; // ⤢
+      wrap.appendChild(badge);
+    });
+    updateSummaryExpandState();
+  }
+
+  /** Mark each summary expandable only when its text is actually clamped */
+  function updateSummaryExpandState() {
+    document.querySelectorAll('.card__summarywrap').forEach(function(wrap) {
+      var el = wrap.querySelector('.card__summary');
+      var badge = wrap.querySelector('.card__summary-cue');
+      if (!el || !badge) return;
+      var expandable = isSummaryTruncated(el);
+      wrap.classList.toggle('is-expandable', expandable);
+      badge.hidden = !expandable;
+    });
+  }
+
+  /** Lazily create the modal once; body swaps (login/logout) can remove it */
+  function ensureSummaryModal() {
+    if (document.getElementById('summary-overlay')) return;
+    var overlay = document.createElement('div');
+    overlay.className = 'summary-overlay';
+    overlay.id = 'summary-overlay';
+    overlay.hidden = true;
+    overlay.innerHTML =
+      '<div class="summary-modal" role="dialog" aria-modal="true" aria-labelledby="summary-modal-title">' +
+        '<div class="summary-modal__head">' +
+          '<h3>AI Summary</h3>' +
+          '<button type="button" class="btn btn--ghost" id="summary-modal-close" aria-label="Close">\u2715</button>' +
+        '</div>' +
+        '<p class="summary-modal__title" id="summary-modal-title"></p>' +
+        '<p class="summary-modal__feed" id="summary-modal-feed"></p>' +
+        '<div class="summary-modal__body" id="summary-modal-body"></div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+  }
+
+  /** Open the modal with the full summary of the given card */
+  function openSummaryModal(wrap) {
+    var el = wrap.querySelector('.card__summary');
+    if (!el) return;
+    ensureSummaryModal();
+
+    var card = wrap.closest('.card');
+    var title = card ? card.querySelector('.card__title') : null;
+    var pen = card ? card.querySelector('.card__pen') : null;
+
+    var titleEl = document.getElementById('summary-modal-title');
+    var feedEl = document.getElementById('summary-modal-feed');
+    var bodyEl = document.getElementById('summary-modal-body');
+    titleEl.textContent = title ? title.textContent.trim() : '';
+    feedEl.textContent = pen ? pen.textContent.trim() : '';
+    feedEl.hidden = !feedEl.textContent;
+    bodyEl.textContent = el.textContent.trim();
+    bodyEl.scrollTop = 0;
+
+    summaryOpener = wrap.querySelector('.card__summary-cue');
+    var overlay = document.getElementById('summary-overlay');
+    overlay.hidden = false;
+    var closeBtn = document.getElementById('summary-modal-close');
+    if (closeBtn) closeBtn.focus();
+  }
+
+  /** Close the modal and hand focus back to the triggering badge */
+  function closeSummaryModal() {
+    var overlay = document.getElementById('summary-overlay');
+    if (!overlay || overlay.hidden) return;
+    overlay.hidden = true;
+    if (summaryOpener) summaryOpener.focus();
+    summaryOpener = null;
+  }
+
+  // Re-measure truncation once web fonts settle and when the viewport width
+  // changes (line count depends on the layout).
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(updateSummaryExpandState);
+  }
+  window.addEventListener('resize', updateSummaryExpandState);
 
   // ─── Keyboard shortcuts help ───────────────────────────────────────
 
@@ -408,6 +567,9 @@
       setupScrollObserver();
     }
 
+    // Full-summary expand affordance (wrap + truncation state)
+    wireSummaryExpand();
+
     // Only auto-dismiss success toasts (not error toasts — those stay until dismissed)
     var flashMessages = document.querySelectorAll('.alert--ok:not(._timed)');
     flashMessages.forEach(function(msg) {
@@ -444,10 +606,15 @@
   document.addEventListener('click', function(e) {
     var t = e.target;
     if (!(t instanceof Element)) return;
+    // Summary modal: backdrop click closes, truncated summary opens
+    if (t.closest('#summary-overlay') && !t.closest('.summary-modal')) { closeSummaryModal(); return; }
+    var summaryWrap = t.closest('.card__summarywrap.is-expandable');
+    if (summaryWrap) { openSummaryModal(summaryWrap); return; }
     if (t.closest('#theme-toggle')) { handleThemeToggle(); return; }
     if (t.closest('#scroll-read-toggle')) { handleScrollReadToggle(); return; }
     if (t.closest('#mark-all-read')) { handleMarkAllRead(); return; }
     if (t.closest('#menu-toggle')) { toggleSidebar(); return; }
+    if (t.closest('#sidebar-close')) { closeSidebar(); return; }
     if (t.closest('#sidebar-overlay')) { closeSidebar(); return; }
     if (t.closest('#shortcuts-help')) { toggleShortcuts(); return; }
   });
@@ -461,7 +628,10 @@
     }
 
     switch (e.key) {
-      case 'j':
+      case 'Escape':
+        closeSummaryModal();
+        closeSidebar();
+        return;
       case 'J':
         e.preventDefault();
         navigateArticle(1);
@@ -500,6 +670,17 @@
 
   // ─── HTMX Event Handlers ───────────────────────────────────────────
 
+  // Remember whether the drawer was open before a swap replaces the whole
+  // aside (add feed, import OPML, sidebar refresh) so we can restore it.
+  var sidebarWasOpen = false;
+  document.addEventListener('htmx:beforeSwap', function(e) {
+    var target = e.detail.target;
+    if (target && target.id === 'feed-sidebar') {
+      var sb = document.getElementById('feed-sidebar');
+      sidebarWasOpen = !!(sb && sb.classList.contains('is-open'));
+    }
+  });
+
   // After any HTMX swap, reset state and re-wire controls/cards.
   // Sidebar badge updates are handled by the server via hx-swap-oob
   // in the ToggleRead response — no client-side arithmetic needed.
@@ -509,8 +690,13 @@
     wireControls();
     rescanCards();
 
-    // Reset scroll when filtering by feed or loading new articles
+    // Keep the drawer open across swaps that replace the whole aside.
     var target = e.detail.target;
+    if (target && target.id === 'feed-sidebar' && sidebarWasOpen && window.innerWidth <= 960) {
+      openSidebar();
+    }
+
+    // Reset scroll when filtering by feed or loading new articles
     if (target && target.id === 'article-list') {
       var stream = document.getElementById('article-list');
       if (stream) stream.scrollTop = 0;
