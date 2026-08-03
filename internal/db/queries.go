@@ -334,3 +334,22 @@ func (db *DB) MarkArticleRead(id, userID int64) error {
 	}
 	return nil
 }
+
+// CountUnreadArticles returns how many unread articles remain for a user,
+// optionally scoped to a single feed. Used to decide whether a read action
+// under the unread-only filter should surface the "all caught up" empty state.
+func (db *DB) CountUnreadArticles(userID int64, feedID *int64) (int, error) {
+	q := `SELECT COUNT(*) FROM articles a
+		JOIN feeds f ON f.id = a.feed_id
+		WHERE f.user_id = $1 AND NOT a.is_read`
+	args := []interface{}{userID}
+	if feedID != nil {
+		q += " AND a.feed_id = $2"
+		args = append(args, *feedID)
+	}
+	var count int
+	if err := db.Get(&count, q, args...); err != nil {
+		return 0, fmt.Errorf("count unread articles: %w", err)
+	}
+	return count, nil
+}

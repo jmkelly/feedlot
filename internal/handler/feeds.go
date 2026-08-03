@@ -63,11 +63,12 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		data := map[string]any{
-			"Articles":   articles,
-			"UnreadOnly": unreadOnly,
-			"FeedID":     feedIDStr,
-			"Limit":      limit,
-			"Offset":     offset,
+			"Articles":     articles,
+			"UnreadOnly":   unreadOnly,
+			"FeedID":       feedIDStr,
+			"Limit":        limit,
+			"Offset":       offset,
+			"FilterParams": filterParams(r),
 		}
 		if offset > 0 {
 			// Load-more pagination: return only the new cards and an updated
@@ -114,6 +115,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		"UnreadOnly":         unreadOnly,
 		"Limit":              limit,
 		"Offset":             offset,
+		"FilterParams":       filterParams(r),
 		"SettingsProvider":   settingsProvider,
 		"SettingsModel":      settingsModel,
 		"SettingsConfigured": settingsConfigured,
@@ -137,10 +139,11 @@ func (h *Handler) ListFeeds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"Feeds": feedsList,
+		"Feeds":  feedsList,
+		"FeedID": r.URL.Query().Get("feed_id"),
 	}
 
-	if err := feedListTmpl.Execute(w, data); err != nil {
+	if err := feedListTmpl.ExecuteTemplate(w, "sidebar-fragment", data); err != nil {
 		log.Printf("render feed list: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
@@ -400,16 +403,22 @@ func (h *Handler) RefreshFeed(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		if stored.Content != nil && *stored.Content != "" {
-			summary, err := h.Summarizer.Summarize(h.buildSummaryRequest(r.Context(), settings, *stored.Content))
-			if err != nil {
-				log.Printf("summarize article %d: %v", stored.ID, err)
-				continue
-			}
-			stored.Summary = &summary
-			if err := h.DB.UpdateArticleSummary(stored.ID, summary); err != nil {
-				log.Printf("update article summary: %v", err)
-			}
+		// Summarize from the full page when the feed only carries a teaser
+		// (Hacker News etc.), otherwise from the feed content itself.
+		articleText, err := h.articleTextForSummary(r.Context(), stored, false)
+		if err != nil {
+			log.Printf("summarize article %d: %v", stored.ID, err)
+			continue
+		}
+
+		summary, err := h.Summarizer.Summarize(h.buildSummaryRequest(r.Context(), settings, articleText))
+		if err != nil {
+			log.Printf("summarize article %d: %v", stored.ID, err)
+			continue
+		}
+		stored.Summary = &summary
+		if err := h.DB.UpdateArticleSummary(stored.ID, summary); err != nil {
+			log.Printf("update article summary: %v", err)
 		}
 	}
 
@@ -446,11 +455,12 @@ func (h *Handler) ListArticlesByFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"Articles":   articles,
-		"FeedID":     feedIDStr,
-		"UnreadOnly": unreadOnly,
-		"Limit":      0,
-		"Offset":     0,
+		"Articles":     articles,
+		"FeedID":       feedIDStr,
+		"UnreadOnly":   unreadOnly,
+		"Limit":        0,
+		"Offset":       0,
+		"FilterParams": filterParams(r),
 	}
 
 	if err := articleListTmpl.Execute(w, data); err != nil {
@@ -511,6 +521,86 @@ func (h *Handler) buildSummaryRequest(ctx context.Context, settings *model.UserS
 
 // ─── Inline Templates ──────────────────────────────────────────────────────
 
+// sidebarInnerBodyDef is the feed-list content shared by the full-page sidebar,
+// the /feeds swap fragments, and the out-of-band badge refresh — one source of
+// truth so every swap path renders identical markup.
+const sidebarInnerBodyDef = `{{define "sidebar-inner-body"}}
+  <div class="panel__head"><span class="panel__title"><b>≡</b> Pen</span></div>
+  <div class="add-feed add-feed--top">
+    <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
+      <input type="url" name="url" placeholder="RSS / Atom URL" required class="input input--sm" id="add-feed-input">
+      <button type="submit" class="btn btn--primary btn--mini">Add</button>
+    </form>
+  </div>
+  <div class="feed{{if not $.FeedID}} feed--active{{end}}">
+    <a href="/" class="feed__row feed__row--all"
+       hx-get="/" hx-target="#article-list" hx-push-url="true"
+       hx-indicator="#loading">
+      <span class="feed__title">All articles</span>
+    </a>
+  </div>
+  {{range .Feeds}}
+  <div class="feed{{if eq $.FeedID (printf "%d" .ID)}} feed--active{{end}}" data-feed-id="{{.ID}}">
+    <a href="/?feed_id={{.ID}}" class="feed__row"
+       hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
+       hx-indicator="#loading">
+      <span class="feed__title">{{.Title}}</span>
+      {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
+    </a>
+    <div class="feed__tools">
+      <button hx-post="/feeds/{{.ID}}/refresh" hx-target="#article-list" hx-indicator="#loading" class="tool" title="Refresh">↻</button>
+      <button hx-delete="/feeds/{{.ID}}" hx-target="closest .feed" hx-swap="outerHTML swap:0.3s"
+        hx-confirm="Remove this feed?" class="tool tool--del" title="Remove">✕</button>
+    </div>
+  </div>
+  {{else}}
+  <div class="empty">
+    <p class="empty__t">No feeds yet</p>
+    <p class="empty__s">Add one below</p>
+  </div>
+  {{end}}
+  <div class="add-feed">
+    <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
+      <input type="url" name="url" placeholder="RSS / Atom URL" required class="input">
+      <button type="submit" class="btn btn--primary btn--mini">Add</button>
+    </form>
+  </div>
+  <div class="add-feed add-feed--opml">
+    <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data">
+      <label class="label-mono">Import OPML</label>
+      <div class="flex gap-2">
+        <input type="file" name="opml_file" accept=".opml,.xml" required class="file">
+        <button type="submit" class="btn btn--ghost btn--mini">Import</button>
+      </div>
+    </form>
+  </div>
+{{end}}`
+
+// sidebarInnerDef wraps the shared content in the inner swap target used by
+// the out-of-band badge refresh.
+const sidebarInnerDef = `{{define "sidebar-inner"}}
+<div id="feed-sidebar-inner">{{template "sidebar-inner-body" .}}</div>
+{{end}}`
+
+// sidebarFragmentDef is the complete off-canvas drawer. AddFeed/ImportOPML and
+// the sidebar refresh swap this whole aside with hx-swap="outerHTML", so the
+// close button lives here — outside #feed-sidebar-inner — and survives every
+// inner swap.
+const sidebarFragmentDef = `{{define "sidebar-fragment"}}
+<aside id="feed-sidebar" class="sidebar">
+  <button class="sidebar__close" id="sidebar-close" type="button" aria-label="Close feed sidebar" title="Close feed sidebar">✕</button>
+  <div class="panel">
+    {{template "sidebar-inner" .}}
+  </div>
+</aside>
+{{end}}`
+
+// feedSidebarOOBTemplate mirrors sidebar-inner with hx-swap-oob for
+// read-toggle responses, keeping unread badges authoritative without any
+// client-side arithmetic.
+const feedSidebarOOBTemplate = `
+<div id="feed-sidebar-inner" hx-swap-oob="true">{{template "sidebar-inner-body" .}}</div>
+`
 const dashboardTemplate = `
 <!DOCTYPE html>
 <html lang="en">
@@ -563,61 +653,7 @@ const dashboardTemplate = `
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
   <main class="layout">
-    <aside id="feed-sidebar" class="sidebar">
-      <div class="panel">
-        <div id="feed-sidebar-inner">
-          <div class="panel__head"><span class="panel__title"><b>≡</b> Pen</span></div>
-          <div class="add-feed add-feed--top">
-            <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
-              <input type="url" name="url" placeholder="RSS / Atom URL" required class="input input--sm" id="add-feed-input">
-              <button type="submit" class="btn btn--primary btn--mini">Add</button>
-            </form>
-          </div>
-          <div class="feed{{if not $.FeedID}} feed--active{{end}}">
-            <a href="/" class="feed__row feed__row--all"
-               hx-get="/" hx-target="#article-list" hx-push-url="true"
-               hx-indicator="#loading">
-              <span class="feed__title">All articles</span>
-            </a>
-          </div>
-          {{range .Feeds}}
-          <div class="feed{{if eq $.FeedID (printf "%d" .ID)}} feed--active{{end}}" data-feed-id="{{.ID}}">
-            <a href="/?feed_id={{.ID}}" class="feed__row"
-               hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
-               hx-indicator="#loading">
-              <span class="feed__title">{{.Title}}</span>
-              {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
-            </a>
-            <div class="feed__tools">
-              <button hx-post="/feeds/{{.ID}}/refresh" hx-target="#article-list" hx-indicator="#loading" class="tool" title="Refresh">↻</button>
-              <button hx-delete="/feeds/{{.ID}}" hx-target="closest .feed" hx-swap="outerHTML swap:0.3s"
-                hx-confirm="Remove this feed?" class="tool tool--del" title="Remove">✕</button>
-            </div>
-          </div>
-          {{else}}
-          <div class="empty">
-            <p class="empty__t">No feeds yet</p>
-            <p class="empty__s">Add one below</p>
-          </div>
-          {{end}}
-          <div class="add-feed">
-            <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
-              <input type="url" name="url" placeholder="RSS / Atom URL" required class="input">
-              <button type="submit" class="btn btn--primary btn--mini">Add</button>
-            </form>
-          </div>
-          <div class="add-feed add-feed--opml">
-            <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data">
-              <label class="label-mono">Import OPML</label>
-              <div class="flex gap-2">
-                <input type="file" name="opml_file" accept=".opml,.xml" required class="file">
-                <button type="submit" class="btn btn--ghost btn--mini">Import</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </aside>
+  {{template "sidebar-fragment" .}}
 
     <section id="article-list" class="stream">
       <div class="stream__bar">
@@ -647,11 +683,11 @@ const dashboardTemplate = `
           {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
         </div>
         <div class="card__actions">
-          <button hx-post="/articles/{{.ID}}/summarize" hx-target="closest .card" hx-swap="outerHTML"
+          <button hx-post="/articles/{{.ID}}/summarize{{$.FilterParams}}" hx-target="closest .card" hx-swap="outerHTML"
             class="card__summarize" title="Generate AI summary">
             <span class="card__summarize-icon">✦</span>
           </button>
-          <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
+          <button hx-post="/articles/{{.ID}}/toggle{{$.FilterParams}}" hx-target="closest .card" hx-swap="outerHTML"
             class="card__read" title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}"
             data-read="{{.IsRead}}">
             {{if not .IsRead}}●{{else}}○{{end}}
@@ -661,8 +697,7 @@ const dashboardTemplate = `
       {{else}}
       <div class="empty">
         <div class="empty__mark">🐄</div>
-        <p class="empty__t">No articles yet</p>
-        <p class="empty__s">Add a feed or refresh existing ones</p>
+        {{if .UnreadOnly}}<p class="empty__t">All caught up</p><p class="empty__s">No unread articles in this view</p>{{else}}<p class="empty__t">No articles yet</p><p class="empty__s">Add a feed or refresh existing ones</p>{{end}}
       </div>
       {{end}}
       {{if and (gt (len .Articles) 0) (gt .Limit 0)}}
@@ -697,116 +732,6 @@ const dashboardTemplate = `
 </html>
 `
 
-const feedListTemplate = `
-<div class="panel">
-  <div class="panel__head"><span class="panel__title"><b>≡</b> Pen</span></div>
-  <div class="add-feed add-feed--top">
-    <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
-      <input type="url" name="url" placeholder="RSS / Atom URL" required class="input input--sm" id="add-feed-input">
-      <button type="submit" class="btn btn--primary btn--mini">Add</button>
-    </form>
-  </div>
-  <div class="feed">
-    <a href="/" class="feed__row feed__row--all"
-       hx-get="/" hx-target="#article-list" hx-push-url="true"
-       hx-indicator="#loading">
-      <span class="feed__title">All articles</span>
-    </a>
-  </div>
-  {{range .Feeds}}
-  <div class="feed" data-feed-id="{{.ID}}">
-    <a href="/?feed_id={{.ID}}" class="feed__row"
-       hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
-       hx-indicator="#loading">
-      <span class="feed__title">{{.Title}}</span>
-      {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
-    </a>
-    <div class="feed__tools">
-      <button hx-post="/feeds/{{.ID}}/refresh" hx-target="#article-list" hx-indicator="#loading" class="tool" title="Refresh">↻</button>
-      <button hx-delete="/feeds/{{.ID}}" hx-target="closest .feed" hx-swap="outerHTML swap:0.3s"
-        hx-confirm="Remove this feed?" class="tool tool--del" title="Remove">✕</button>
-    </div>
-  </div>
-  {{else}}
-  <div class="empty">
-    <p class="empty__t">No feeds yet</p>
-    <p class="empty__s">Add one below</p>
-  </div>
-  {{end}}
-  <div class="add-feed">
-    <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
-      <input type="url" name="url" placeholder="RSS / Atom URL" required class="input">
-      <button type="submit" class="btn btn--primary btn--mini">Add</button>
-    </form>
-  </div>
-  <div class="add-feed add-feed--opml">
-    <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data">
-      <label class="label-mono">Import OPML</label>
-      <div class="flex gap-2">
-        <input type="file" name="opml_file" accept=".opml,.xml" required class="file">
-        <button type="submit" class="btn btn--ghost btn--mini">Import</button>
-      </div>
-    </form>
-  </div>
-</div>
-`
-
-// feedSidebarOOBTemplate renders just the feed list items wrapped in an hx-swap-oob div.
-// Used by ToggleRead to return authoritative unread counts alongside the card swap,
-// keeping sidebar badges in sync without any client-side arithmetic.
-const feedSidebarOOBTemplate = `
-<div id="feed-sidebar-inner" hx-swap-oob="true">
-  <div class="add-feed add-feed--top">
-    <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
-      <input type="url" name="url" placeholder="RSS / Atom URL" required class="input input--sm" id="add-feed-input">
-      <button type="submit" class="btn btn--primary btn--mini">Add</button>
-    </form>
-  </div>
-  <div class="feed">
-    <a href="/" class="feed__row feed__row--all"
-       hx-get="/" hx-target="#article-list" hx-push-url="true"
-       hx-indicator="#loading">
-      <span class="feed__title">All articles</span>
-    </a>
-  </div>
-  {{range .Feeds}}
-  <div class="feed" data-feed-id="{{.ID}}">
-    <a href="/?feed_id={{.ID}}" class="feed__row"
-       hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
-       hx-indicator="#loading">
-      <span class="feed__title">{{.Title}}</span>
-      {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
-    </a>
-    <div class="feed__tools">
-      <button hx-post="/feeds/{{.ID}}/refresh" hx-target="#article-list" hx-indicator="#loading" class="tool" title="Refresh">↻</button>
-      <button hx-delete="/feeds/{{.ID}}" hx-target="closest .feed" hx-swap="outerHTML swap:0.3s"
-        hx-confirm="Remove this feed?" class="tool tool--del" title="Remove">✕</button>
-    </div>
-  </div>
-  {{else}}
-  <div class="empty">
-    <p class="empty__t">No feeds yet</p>
-    <p class="empty__s">Add one below</p>
-  </div>
-  {{end}}
-  <div class="add-feed">
-    <form hx-post="/feeds" hx-target="#feed-sidebar" hx-swap="outerHTML" class="flex gap-2">
-      <input type="url" name="url" placeholder="RSS / Atom URL" required class="input">
-      <button type="submit" class="btn btn--primary btn--mini">Add</button>
-    </form>
-  </div>
-  <div class="add-feed add-feed--opml">
-    <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data">
-      <label class="label-mono">Import OPML</label>
-      <div class="flex gap-2">
-        <input type="file" name="opml_file" accept=".opml,.xml" required class="file">
-        <button type="submit" class="btn btn--ghost btn--mini">Import</button>
-      </div>
-    </form>
-  </div>
-</div>
-`
-
 const articleListTemplate = `
 <div class="stream__bar">
   {{if .FeedID}}
@@ -834,11 +759,11 @@ const articleListTemplate = `
     {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
   </div>
   <div class="card__actions">
-    <button hx-post="/articles/{{.ID}}/summarize" hx-target="closest .card" hx-swap="outerHTML"
+    <button hx-post="/articles/{{.ID}}/summarize{{$.FilterParams}}" hx-target="closest .card" hx-swap="outerHTML"
       class="card__summarize" title="Generate AI summary">
       <span class="card__summarize-icon">✦</span>
     </button>
-    <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
+    <button hx-post="/articles/{{.ID}}/toggle{{$.FilterParams}}" hx-target="closest .card" hx-swap="outerHTML"
       class="card__read" title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}"
       data-read="{{.IsRead}}">
       {{if not .IsRead}}●{{else}}○{{end}}
@@ -848,8 +773,7 @@ const articleListTemplate = `
 {{else}}
 <div class="empty">
   <div class="empty__mark">🐄</div>
-  <p class="empty__t">No articles yet</p>
-  <p class="empty__s">Add a feed or refresh existing ones</p>
+  {{if .UnreadOnly}}<p class="empty__t">All caught up</p><p class="empty__s">No unread articles in this view</p>{{else}}<p class="empty__t">No articles yet</p><p class="empty__s">Add a feed or refresh existing ones</p>{{end}}
 </div>
 {{end}}
 {{if and (gt (len .Articles) 0) (gt .Limit 0) (ge (len .Articles) .Limit)}}
@@ -880,11 +804,11 @@ const loadMoreTemplate = `
     {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
   </div>
   <div class="card__actions">
-    <button hx-post="/articles/{{.ID}}/summarize" hx-target="closest .card" hx-swap="outerHTML"
+    <button hx-post="/articles/{{.ID}}/summarize{{$.FilterParams}}" hx-target="closest .card" hx-swap="outerHTML"
       class="card__summarize" title="Generate AI summary">
       <span class="card__summarize-icon">✦</span>
     </button>
-    <button hx-post="/articles/{{.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
+    <button hx-post="/articles/{{.ID}}/toggle{{$.FilterParams}}" hx-target="closest .card" hx-swap="outerHTML"
       class="card__read" title="{{if .IsRead}}Mark unread{{else}}Mark read{{end}}"
       data-read="{{.IsRead}}">
       {{if not .IsRead}}●{{else}}○{{end}}

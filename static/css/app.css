@@ -1022,6 +1022,31 @@ button.htmx-request { opacity: .65; cursor: wait; }
 }
 .sidebar-overlay.is-open { display: block; }
 
+/* Drawer close button — sits on the drawer itself (outside the swapped inner
+   content) and only exists in the mobile drawer; hidden on desktop. */
+.sidebar__close {
+  display: none;
+  position: absolute;
+  top: .65rem;
+  right: .65rem;
+  z-index: 5;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  font-size: .85rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+.sidebar__close:hover { color: var(--accent); border-color: var(--ink-soft); }
+
+/* Scroll lock while the drawer is open: the page behind must not move. */
+html.drawer-open, body.drawer-open { overflow: hidden; }
+
 @media (max-width: 960px) {
   .hamburger { display: flex; }
 
@@ -1031,19 +1056,35 @@ button.htmx-request { opacity: .65; cursor: wait; }
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 95;
+    z-index: 160; /* above the sticky topbar (100) so the topbar never covers the feed list */
     width: 18rem;
     max-width: 85vw;
+    /* 100dvh = the visible viewport on iOS Safari (URL bar shown), so the
+       bottom of the feed list is reachable; 100vh is the fallback for older
+       browsers that don't know dvh. */
     height: 100vh;
+    height: 100dvh;
     overflow-y: auto;
+    /* Keep momentum scrolling inside the drawer and stop the page behind
+       from swallowing swipes (iOS scroll chaining). */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     background: var(--paper);
     border-right: 1px solid var(--line-strong);
     box-shadow: 4px 0 16px var(--shadow-soft);
     padding: 1rem;
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
     transform: translateX(-100%);
     transition: transform 250ms ease;
   }
   .sidebar.is-open { transform: translateX(0); }
+
+  .sidebar__close { display: grid; }
+
+  /* Overlay above the topbar too, so the drawer is the only thing on screen
+     while open — tap anywhere outside it to close. */
+  .sidebar-overlay.is-open { z-index: 150; }
 
   .topbar { flex-wrap: wrap; padding: .4rem .8rem; gap: .5rem; }
   .topbar__tag { display: none; }

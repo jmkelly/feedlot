@@ -35,11 +35,12 @@ func (h *Handler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"Articles":   articles,
-		"FeedID":     feedIDStr,
-		"UnreadOnly": unreadOnly,
-		"Limit":      0,
-		"Offset":     0,
+		"Articles":     articles,
+		"FeedID":       feedIDStr,
+		"UnreadOnly":   unreadOnly,
+		"Limit":        0,
+		"Offset":       0,
+		"FilterParams": filterParams(r),
 	}
 
 	if err := articleListTmpl.Execute(w, data); err != nil {
@@ -93,10 +94,20 @@ func (h *Handler) ToggleRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// When the unread-only filter is active, a post that is now read must
+	// disappear from the view: swap the card away (empty main content) and
+	// refresh the sidebar OOB. If nothing unread remains, the server swaps in
+	// the "all caught up" empty state instead.
+	if r.URL.Query().Get("unread") == "1" && article.IsRead {
+		h.renderUnreadRemoval(w, userID, r.URL.Query().Get("feed_id"))
+		return
+	}
+
 	// Render the updated card (primary HTMX swap target)
 	// hx-target="closest .card" hx-swap="outerHTML" on the toggle button
 	data := map[string]any{
-		"Article": *article,
+		"Article":      *article,
+		"FilterParams": filterParams(r),
 	}
 	if err := articleCardTmpl.Execute(w, data); err != nil {
 		log.Printf("render article card: %v", err)
@@ -120,6 +131,47 @@ func (h *Handler) ToggleRead(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// renderUnreadRemoval writes the response for a read action performed while the
+// unread-only filter is active: the card is swapped away (empty main content,
+// which htmx replaces the card with under hx-swap="outerHTML"), or the
+// "all caught up" empty state when no unread articles remain in the current
+// view. The feed sidebar is refreshed alongside via an OOB swap so unread
+// counts stay authoritative.
+func (h *Handler) renderUnreadRemoval(w http.ResponseWriter, userID int64, feedIDStr string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// A non-empty feed_id that fails to parse intentionally falls back to nil
+	// (all feeds): the dashboard list applies the same ParseInt (feeds.go), so
+	// the count and the displayed view always agree. The empty response body is
+	// the card-removal signal under hx-swap="outerHTML"; sidebar OOB failures
+	// log and degrade silently, matching the ToggleRead OOB path.
+	var feedID *int64
+	if feedIDStr != "" {
+		if fid, err := strconv.ParseInt(feedIDStr, 10, 64); err == nil {
+			feedID = &fid
+		}
+	}
+
+	remaining, err := h.DB.CountUnreadArticles(userID, feedID)
+	if err != nil {
+		log.Printf("count unread articles: %v", err)
+	} else if remaining == 0 {
+		data := map[string]any{"UnreadOnly": true}
+		if err := emptyStateTmpl.Execute(w, data); err != nil {
+			log.Printf("render empty state: %v", err)
+		}
+	}
+
+	feeds, err := h.DB.GetUserFeeds(userID)
+	if err != nil {
+		log.Printf("get feeds for oob: %v", err)
+		return
+	}
+	if err := feedSidebarOOBTmpl.Execute(w, map[string]any{"Feeds": feeds}); err != nil {
+		log.Printf("render feed sidebar oob: %v", err)
+	}
+}
+
 func (h *Handler) SummarizeArticle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	userID := GetUserID(r)
@@ -135,12 +187,6 @@ func (h *Handler) SummarizeArticle(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("get article %d for summarize: %v", articleID, err)
 		http.Error(w, "Article not found", http.StatusNotFound)
-		return
-	}
-
-	// Need content to summarize
-	if article.Content == nil || *article.Content == "" {
-		http.Error(w, "Article has no content", http.StatusBadRequest)
 		return
 	}
 
@@ -176,6 +222,16 @@ func (h *Handler) SummarizeArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Summarize the whole page the feed item points at (Hacker News items only
+	// carry a "Comments" link, not the article), falling back to the feed's
+	// own content when the page can't be fetched.
+	articleText, err := h.articleTextForSummary(r.Context(), article, true)
+	if err != nil {
+		log.Printf("summarize article %d: %v", articleID, err)
+		http.Error(w, "Article has no content", http.StatusBadRequest)
+		return
+	}
+
 	baseURL := ""
 	if settings.BaseURL != nil {
 		baseURL = *settings.BaseURL
@@ -186,7 +242,7 @@ func (h *Handler) SummarizeArticle(w http.ResponseWriter, r *http.Request) {
 		APIKey:      apiKey,
 		Model:       settings.ModelName,
 		BaseURL:     baseURL,
-		ArticleText: *article.Content,
+		ArticleText: articleText,
 		Length:      settings.SummaryLength,
 		SummaryLang: settings.SummaryLanguage,
 		Context:     r.Context(),
@@ -206,10 +262,13 @@ func (h *Handler) SummarizeArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Re-render the updated card (same as ToggleRead pattern)
+	// Re-render the updated card (same as ToggleRead pattern). FilterParams
+	// keeps the unread/feed filter state flowing through the re-rendered
+	// card's buttons.
 	article.Summary = &summary
 	data := map[string]any{
-		"Article": *article,
+		"Article":      *article,
+		"FilterParams": filterParams(r),
 	}
 	if err := articleCardTmpl.Execute(w, data); err != nil {
 		log.Printf("render article card after summarize: %v", err)
@@ -231,6 +290,13 @@ func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
 		log.Printf("mark article read: %v", err)
 	}
 
+	// Scroll-past-read under the unread-only filter: the card is swapped away
+	// via the same server-driven removal as the toggle (see renderUnreadRemoval).
+	if r.URL.Query().Get("unread") == "1" {
+		h.renderUnreadRemoval(w, userID, r.URL.Query().Get("feed_id"))
+		return
+	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -244,11 +310,11 @@ const articleCardTemplate = `
     {{if .Article.Summary}}<p class="card__summary">{{deref .Article.Summary}}</p>{{end}}
   </div>
   <div class="card__actions">
-    <button hx-post="/articles/{{.Article.ID}}/summarize" hx-target="closest .card" hx-swap="outerHTML"
+    <button hx-post="/articles/{{.Article.ID}}/summarize{{.FilterParams}}" hx-target="closest .card" hx-swap="outerHTML"
       class="card__summarize" title="Generate AI summary">
       <span class="card__summarize-icon">✦</span>
     </button>
-    <button hx-post="/articles/{{.Article.ID}}/toggle" hx-target="closest .card" hx-swap="outerHTML"
+    <button hx-post="/articles/{{.Article.ID}}/toggle{{.FilterParams}}" hx-target="closest .card" hx-swap="outerHTML"
       class="card__read" title="{{if .Article.IsRead}}Mark unread{{else}}Mark read{{end}}"
       data-read="{{.Article.IsRead}}">
       {{if not .Article.IsRead}}●{{else}}○{{end}}

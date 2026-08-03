@@ -3,6 +3,8 @@ package handler
 import (
 	"fmt"
 	"html/template"
+	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -61,6 +63,11 @@ func timeAgo(t interface{}) string {
 var (
 	authTmpl = template.Must(template.New("auth").Parse(authPageTemplate))
 
+	// The sidebar defines are shared by three parse trees: the full dashboard
+	// page, the /feeds swap fragment (outerHTML of the whole aside), and the
+	// out-of-band badge refresh (innerHTML of #feed-sidebar-inner).
+	sidebarDefs = sidebarInnerBodyDef + sidebarInnerDef + sidebarFragmentDef
+
 	dashboardTmpl = template.Must(template.New("dashboard").Funcs(template.FuncMap{
 		"deref": func(s *string) string {
 			if s == nil {
@@ -69,8 +76,8 @@ var (
 			return *s
 		},
 		"timeAgo": timeAgo,
-		"add": func(a, b int) int { return a + b },
-	}).Parse(dashboardTemplate))
+		"add":     func(a, b int) int { return a + b },
+	}).Parse(sidebarDefs + dashboardTemplate))
 
 	feedListTmpl = template.Must(template.New("feed-list").Funcs(template.FuncMap{
 		"deref": func(s *string) string {
@@ -79,7 +86,7 @@ var (
 			}
 			return *s
 		},
-	}).Parse(feedListTemplate))
+	}).Parse(sidebarDefs))
 
 	feedSidebarOOBTmpl = template.Must(template.New("feed-sidebar-oob").Funcs(template.FuncMap{
 		"deref": func(s *string) string {
@@ -88,7 +95,9 @@ var (
 			}
 			return *s
 		},
-	}).Parse(feedSidebarOOBTemplate))
+	}).Parse(sidebarInnerBodyDef + feedSidebarOOBTemplate))
+
+	emptyStateTmpl = template.Must(template.New("empty-state").Parse(emptyStateTemplate))
 
 	articleListTmpl = template.Must(template.New("article-list").Funcs(template.FuncMap{
 		"deref": func(s *string) string {
@@ -98,7 +107,7 @@ var (
 			return *s
 		},
 		"timeAgo": timeAgo,
-		"add": func(a, b int) int { return a + b },
+		"add":     func(a, b int) int { return a + b },
 	}).Parse(articleListTemplate))
 
 	loadMoreTmpl = template.Must(template.New("load-more").Funcs(template.FuncMap{
@@ -109,7 +118,7 @@ var (
 			return *s
 		},
 		"timeAgo": timeAgo,
-		"add": func(a, b int) int { return a + b },
+		"add":     func(a, b int) int { return a + b },
 	}).Parse(loadMoreTemplate))
 
 	articleCardTmpl = template.Must(template.New("article-card").Funcs(template.FuncMap{
@@ -143,6 +152,35 @@ var (
 		},
 	}).Parse(adminPageTemplate))
 )
+
+// filterParams returns the query-string suffix (with a leading "?") that
+// preserves the current dashboard filter state — unread-only toggle and feed
+// selection — across HTMX requests like the read-toggle and summarize buttons.
+// Returns "" when no filter is active.
+func filterParams(r *http.Request) string {
+	q := r.URL.Query()
+	vals := url.Values{}
+	if q.Get("unread") == "1" {
+		vals.Set("unread", "1")
+	}
+	if fid := q.Get("feed_id"); fid != "" {
+		vals.Set("feed_id", fid)
+	}
+	if len(vals) == 0 {
+		return ""
+	}
+	return "?" + vals.Encode()
+}
+
+// emptyStateTemplate is the "all caught up" placeholder swapped in place of a
+// card when a read action empties the unread-only view.
+const emptyStateTemplate = `
+<div class="empty">
+  <div class="empty__mark">🐄</div>
+  <p class="empty__t">All caught up</p>
+  <p class="empty__s">No unread articles in this view</p>
+</div>
+`
 
 const adminPageTemplate = `
 <!DOCTYPE html>
