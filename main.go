@@ -82,9 +82,15 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// Static files
-	fileServer := http.FileServer(http.Dir("./static"))
-	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
+	// Static files — no-cache so CSS/JS changes are picked up on refresh
+	// while unchanged files still get efficient 304s via Last-Modified
+	// revalidation (http.FileServer sets Last-Modified; without Cache-Control
+	// some browsers apply heuristic caching and serve stale assets).
+	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("./static")))
+	r.Handle("/static/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		staticHandler.ServeHTTP(w, req)
+	}))
 
 	// ─── Routes ────────────────────────────────────────────────────────────
 
