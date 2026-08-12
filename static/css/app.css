@@ -237,14 +237,23 @@ button.htmx-request { opacity: .65; cursor: wait; }
   color: var(--ink-faint);
 }
 
+/* The OPML file input is visually hidden — tapping the native control (or its
+   ::file-selector-button) inside the transformed mobile drawer doesn't open
+   the picker on iPad Safari, so app.js opens it via .click() from the
+   .file-btn label. It stays in the DOM and focusable for keyboard users. */
 .file {
-  width: 100%;
-  font-family: var(--font-mono);
-  font-size: .72rem;
-  color: var(--ink-soft);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
 }
-.file::file-selector-button {
-  margin-right: .6rem;
+.file-btn {
+  display: inline-flex;
+  align-items: center;
   padding: .35rem .6rem;
   font-family: var(--font-mono);
   font-size: .68rem;
@@ -254,8 +263,21 @@ button.htmx-request { opacity: .65; cursor: wait; }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   cursor: pointer;
+  white-space: nowrap;
+  transition: color 150ms ease, border-color 150ms ease;
 }
-.file::file-selector-button:hover { color: var(--ink); border-color: var(--ink-soft); }
+.file-btn:hover,
+.file-btn:has(+ .file:focus-visible) { color: var(--ink); border-color: var(--ink-soft); }
+
+.file-name {
+  margin: .35rem 0 0;
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .label-mono {
   display: block;

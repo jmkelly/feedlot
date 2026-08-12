@@ -567,11 +567,17 @@ const sidebarInnerBodyDef = `{{define "sidebar-inner-body"}}
   </div>
   <div class="add-feed add-feed--opml">
     <form hx-post="/feeds/import" hx-target="#feed-sidebar" hx-swap="outerHTML" hx-encoding="multipart/form-data">
-      <label class="label-mono">Import OPML</label>
+      <span class="label-mono">Import OPML</span>
       <div class="flex gap-2">
-        <input type="file" name="opml_file" accept=".opml,.xml" required class="file">
+        <!-- The native file input is visually hidden and opened from the label
+             below: on iPad Safari, tapping the raw input (or its
+             ::file-selector-button) inside the transformed drawer doesn't open
+             the picker, so app.js triggers it with a programmatic .click(). -->
+        <label for="opml-file" class="file-btn">Choose file</label>
+        <input type="file" id="opml-file" name="opml_file" accept=".opml,.xml" required class="file">
         <button type="submit" class="btn btn--ghost btn--mini">Import</button>
       </div>
+      <p class="file-name" id="opml-file-name" hidden></p>
     </form>
   </div>
 {{end}}`

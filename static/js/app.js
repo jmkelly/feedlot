@@ -617,6 +617,26 @@
     if (t.closest('#sidebar-close')) { closeSidebar(); return; }
     if (t.closest('#sidebar-overlay')) { closeSidebar(); return; }
     if (t.closest('#shortcuts-help')) { toggleShortcuts(); return; }
+    // OPML file picker: open the (visually hidden) input programmatically.
+    // On iPad Safari, a tap on the raw file input inside the transformed
+    // drawer never opens the picker, but a synthetic .click() does.
+    if (t.closest('label[for="opml-file"]')) {
+      e.preventDefault();
+      var opmlInput = document.getElementById('opml-file');
+      if (opmlInput) opmlInput.click();
+      return;
+    }
+  });
+
+  // Show the chosen filename next to the Choose-file button
+  document.addEventListener('change', function(e) {
+    var t = e.target;
+    if (!(t instanceof Element) || t.id !== 'opml-file') return;
+    var nameEl = document.getElementById('opml-file-name');
+    if (!nameEl) return;
+    var name = t.files && t.files[0] ? t.files[0].name : '';
+    nameEl.textContent = name;
+    nameEl.hidden = !name;
   });
 
   // ─── Global keyboard shortcuts ─────────────────────────────────────
