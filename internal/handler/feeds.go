@@ -572,9 +572,13 @@ const sidebarInnerBodyDef = `{{define "sidebar-inner-body"}}
         <!-- The native file input is visually hidden and opened from the label
              below: on iPad Safari, tapping the raw input (or its
              ::file-selector-button) inside the transformed drawer doesn't open
-             the picker, so app.js triggers it with a programmatic .click(). -->
+             the picker, so app.js triggers it with a programmatic .click().
+             No accept attribute: iPadOS's Files picker treats it as a strict
+             type filter, so OPML files from DuckDuckGo downloads (unregistered
+             UTI) appear grayed out and unselectable. The server validates the
+             file content anyway. -->
         <label for="opml-file" class="file-btn">Choose file</label>
-        <input type="file" id="opml-file" name="opml_file" accept=".opml,.xml" required class="file">
+        <input type="file" id="opml-file" name="opml_file" required class="file">
         <button type="submit" class="btn btn--ghost btn--mini">Import</button>
       </div>
       <p class="file-name" id="opml-file-name" hidden></p>

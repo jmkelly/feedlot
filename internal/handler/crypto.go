@@ -4,11 +4,20 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 )
+
+// deriveKey converts an arbitrary passphrase into a fixed 32-byte AES-256 key.
+// This allows any-length FEEDLOT_ENCRYPTION_KEY values (including the
+// 64-character hex output of `openssl rand -hex 32`).
+func deriveKey(passphrase []byte) []byte {
+	sum := sha256.Sum256(passphrase)
+	return sum[:]
+}
 
 // Encrypt encrypts plaintext using AES-256-GCM with the given key.
 // Returns hex(nonce) + "$" + hex(ciphertext).
@@ -17,10 +26,7 @@ func Encrypt(plaintext []byte, key []byte) (string, error) {
 		return "", errors.New("encryption key is empty")
 	}
 
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", fmt.Errorf("create cipher: %w", err)
-	}
+	block, err := aes.NewCipher(deriveKey(key))
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
@@ -65,7 +71,7 @@ func Decrypt(encoded string, key []byte) ([]byte, error) {
 		return nil, fmt.Errorf("decode ciphertext: %w", err)
 	}
 
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(deriveKey(key))
 	if err != nil {
 		return nil, fmt.Errorf("create cipher: %w", err)
 	}
@@ -76,9 +82,21 @@ func Decrypt(encoded string, key []byte) ([]byte, error) {
 	}
 
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt: %w", err)
+	if err == nil {
+		return plaintext, nil
 	}
 
-	return plaintext, nil
+	// Backward compatibility: data encrypted before the key-derivation change
+	// used the raw passphrase bytes as the AES key (only valid for 16/24/32 bytes).
+	if len(key) == 16 || len(key) == 24 || len(key) == 32 {
+		if legacyBlock, err := aes.NewCipher(key); err == nil {
+			if legacyGCM, err := cipher.NewGCM(legacyBlock); err == nil {
+				if legacyPlain, err := legacyGCM.Open(nil, nonce, ciphertext, nil); err == nil {
+					return legacyPlain, nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("decrypt: %w", err)
 }

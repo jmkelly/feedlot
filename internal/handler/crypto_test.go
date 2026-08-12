@@ -2,6 +2,10 @@ package handler
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/hex"
 	"testing"
 )
 
@@ -149,13 +153,53 @@ func TestEncryptDecryptLongData(t *testing.T) {
 	}
 }
 
-func TestEncryptKeyNot32Bytes(t *testing.T) {
-	// AES-256 requires 32 bytes, but Go's AES implementation will panic on wrong size
-	// We test that it returns an error, not a panic
-	key := []byte("too-short")
+func TestEncryptAnyLengthKey(t *testing.T) {
+	// Any-length passphrase should work since it's hashed into a 32-byte AES key.
+	for _, key := range []string{
+		"too-short",
+		"ab6281dd082d2b275",                            // 17 chars
+		"0123456789abcdef0123456789abcdef0123456789abcdef", // 64 chars (openssl rand -hex 32)
+	} {
+		encrypted, err := Encrypt([]byte("secret-api-key"), []byte(key))
+		if err != nil {
+			t.Fatalf("Encrypt with key %q failed: %v", key, err)
+		}
 
-	_, err := Encrypt([]byte("data"), key)
-	if err == nil {
-		t.Error("Encrypt should fail with key that is not 32 bytes")
+		decrypted, err := Decrypt(encrypted, []byte(key))
+		if err != nil {
+			t.Fatalf("Decrypt with key %q failed: %v", key, err)
+		}
+
+		if string(decrypted) != "secret-api-key" {
+			t.Errorf("Decrypted = %q, want %q", string(decrypted), "secret-api-key")
+		}
+	}
+}
+
+func TestDecryptLegacyRawKeyFormat(t *testing.T) {
+	// Data encrypted by the old code used raw 32-byte keys — must still decrypt.
+	legacyKey := []byte("0123456789abcdef0123456789abcdef")
+
+	legacyBlock, err := aes.NewCipher(legacyKey)
+	if err != nil {
+		t.Fatalf("legacy cipher: %v", err)
+	}
+	legacyGCM, err := cipher.NewGCM(legacyBlock)
+	if err != nil {
+		t.Fatalf("legacy gcm: %v", err)
+	}
+	nonce := make([]byte, legacyGCM.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		t.Fatalf("nonce: %v", err)
+	}
+	ciphertext := legacyGCM.Seal(nil, nonce, []byte("old-format-key"), nil)
+	encoded := hex.EncodeToString(nonce) + "$" + hex.EncodeToString(ciphertext)
+
+	decrypted, err := Decrypt(encoded, legacyKey)
+	if err != nil {
+		t.Fatalf("Decrypt legacy format failed: %v", err)
+	}
+	if string(decrypted) != "old-format-key" {
+		t.Errorf("Decrypted = %q, want %q", string(decrypted), "old-format-key")
 	}
 }
