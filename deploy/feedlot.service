@@ -1,0 +1,23 @@
+[Unit]
+Description=Feedlot - self-hosted RSS/Atom feed reader
+Documentation=https://github.com/jmkelly/feedlot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/james/feedlot
+EnvironmentFile=/home/james/feedlot/.env
+ExecStart=/home/james/feedlot/feedlot
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/james/feedlot
+
+[Install]
+WantedBy=default.target

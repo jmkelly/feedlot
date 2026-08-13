@@ -302,7 +302,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   - `FEEDLOT_ENCRYPTION_KEY` (for API key storage)
   - `FEEDLOT_POLL_INTERVAL` (default: 30m)
 - Single binary build: `go build -o feedlot .`
-- Dockerfile: multi-stage build with scratch or alpine
+- Systemd user service: `deploy/feedlot.service` — this is how Feedlot is actually deployed and run (see README "Run as a systemd service")
 
 ---
 

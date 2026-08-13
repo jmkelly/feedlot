@@ -18,7 +18,7 @@
 - **⚙️ Configurable AI** — Choose provider, model, base URL, summary length, and language from the Settings page.
 - **🧪 Test connection** — Verify your AI provider credentials right from Settings.
 - **🗄️ Admin logs** — Built-in log viewer for debugging feed fetches and AI calls.
-- **🐳 Single binary** — Compiles to a ~19 MB static binary. Deploy anywhere.
+- **🐳 Single binary** — Compiles to a ~19 MB static binary with a ready-to-use systemd user unit. Deploy anywhere.
 
 ---
 
@@ -82,6 +82,38 @@ FEEDLOT_ENCRYPTION_KEY=<your random encryption key>
 FEEDLOT_PORT=8090
 ```
 
+### Run as a systemd service (recommended)
+
+Feedlot ships with a **user** systemd unit at [`deploy/feedlot.service`](deploy/feedlot.service) — this is how the app is deployed and run. It launches the compiled binary from the project root, loads `.env`, and restarts automatically on crash.
+
+```bash
+# 1. Install the unit
+install -Dm644 deploy/feedlot.service ~/.config/systemd/user/feedlot.service
+
+# 2. Enable linger so the service starts at boot and keeps running after logout
+loginctl enable-linger "$USER"
+
+# 3. Reload, enable, start
+systemctl --user daemon-reload
+systemctl --user enable --now feedlot
+```
+
+Common operations:
+
+```bash
+systemctl --user status feedlot    # status
+systemctl --user restart feedlot   # restart
+journalctl --user -u feedlot -f    # follow logs
+```
+
+After rebuilding the binary, restart the service to pick it up:
+
+```bash
+go build -o feedlot . && systemctl --user restart feedlot
+```
+
+> **Note:** `deploy/feedlot.service` hardcodes the deploy path `/home/james/feedlot`. If you deploy elsewhere, update `WorkingDirectory`, `ExecStart`, `EnvironmentFile`, and `ReadWritePaths` to match.
+
 ### Test account
 
 If the database ships with a test user, sign in with:
@@ -135,6 +167,7 @@ feedlot/
 │   ├── js/app.js            # Minimal vanilla JS
 │   └── favicon.svg          # Cow favicon
 ├── migrations/              # SQL migration files
+├── deploy/                  # Systemd user unit (feedlot.service)
 └── screenshots/             # Screenshots for docs
 ```
 

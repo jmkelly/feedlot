@@ -149,6 +149,60 @@ func (h *Handler) ListFeeds(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ─── OPML Export ─────────────────────────────────────────────────────────
+
+func (h *Handler) ExportOPML(w http.ResponseWriter, r *http.Request) {
+	userID := GetUserID(r)
+
+	feedsList, err := h.DB.GetUserFeeds(userID)
+	if err != nil {
+		log.Printf("export feeds: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	now := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")
+	doc := opmlDocument{
+		Version: "1.1",
+		Head: opmlHead{
+			Title:        "Feedlot Subscriptions",
+			DateCreated:  now,
+			DateModified: now,
+		},
+	}
+
+	if user, err := h.DB.GetUserByID(userID); err == nil {
+		doc.Head.OwnerEmail = user.Email
+	}
+
+	for _, f := range feedsList {
+		outline := opmlOutline{
+			Text:   f.Title,
+			Title:  f.Title,
+			Type:   "rss",
+			XMLURL: f.FeedURL,
+		}
+		if f.SiteURL != nil {
+			outline.HTMLURL = *f.SiteURL
+		}
+		doc.Body.Outlines = append(doc.Body.Outlines, outline)
+	}
+
+	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="feedlot-subscriptions.opml"`)
+
+	if _, err := io.WriteString(w, xml.Header); err != nil {
+		log.Printf("export opml: write header: %v", err)
+		return
+	}
+	enc := xml.NewEncoder(w)
+	enc.Indent("", "  ")
+	if err := enc.Encode(doc); err != nil {
+		log.Printf("export opml: encode: %v", err)
+		return
+	}
+}
+
 // ─── OPML Import ─────────────────────────────────────────────────────────
 
 type opmlDocument struct {
@@ -159,7 +213,10 @@ type opmlDocument struct {
 }
 
 type opmlHead struct {
-	Title string `xml:"title"`
+	Title        string `xml:"title"`
+	DateCreated  string `xml:"dateCreated,omitempty"`
+	DateModified string `xml:"dateModified,omitempty"`
+	OwnerEmail   string `xml:"ownerEmail,omitempty"`
 }
 
 type opmlBody struct {
@@ -583,6 +640,8 @@ const sidebarInnerBodyDef = `{{define "sidebar-inner-body"}}
       </div>
       <p class="file-name" id="opml-file-name" hidden></p>
     </form>
+    <a href="/feeds/export" class="file-btn" style="margin-top:.5rem"
+       title="Download all feeds as an OPML file">Export OPML &darr;</a>
   </div>
 {{end}}`
 
