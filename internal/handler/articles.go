@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -27,7 +28,11 @@ func (h *Handler) ListArticles(w http.ResponseWriter, r *http.Request) {
 
 	unreadOnly := r.URL.Query().Get("unread") == "1"
 
-	articles, err := h.DB.GetArticlesByUserID(userID, feedID, unreadOnly, 0, 0)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	queryQS, queryAmp := searchQueryFragments(query)
+	clearH := clearHref(unreadOnly, query)
+
+	articles, err := h.DB.GetArticlesByUserID(userID, feedID, unreadOnly, query, 0, 0)
 	if err != nil {
 		log.Printf("list articles: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -37,6 +42,10 @@ func (h *Handler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"Articles":     articles,
 		"FeedID":       feedIDStr,
+		"Query":        query,
+		"QueryQS":      queryQS,
+		"QueryAmp":     queryAmp,
+		"ClearHref":    clearH,
 		"UnreadOnly":   unreadOnly,
 		"Limit":        0,
 		"Offset":       0,
@@ -99,7 +108,7 @@ func (h *Handler) ToggleRead(w http.ResponseWriter, r *http.Request) {
 	// refresh the sidebar OOB. If nothing unread remains, the server swaps in
 	// the "all caught up" empty state instead.
 	if r.URL.Query().Get("unread") == "1" && article.IsRead {
-		h.renderUnreadRemoval(w, userID, r.URL.Query().Get("feed_id"))
+		h.renderUnreadRemoval(w, userID, r.URL.Query().Get("feed_id"), r.URL.Query().Get("q"))
 		return
 	}
 
@@ -118,13 +127,17 @@ func (h *Handler) ToggleRead(w http.ResponseWriter, r *http.Request) {
 	// Render the OOB feed sidebar with authoritative unread counts from the server.
 	// HTMX will process this as an out-of-band swap and update #feed-sidebar-inner,
 	// keeping unread badges in sync without any client-side arithmetic.
+	queryQS, queryAmp := searchQueryFragments(r.URL.Query().Get("q"))
 	feeds, err := h.DB.GetUserFeeds(userID)
 	if err != nil {
 		log.Printf("get feeds for oob: %v", err)
 		return
 	}
 	feedData := map[string]any{
-		"Feeds": feeds,
+		"Feeds":     feeds,
+		"Query":     r.URL.Query().Get("q"),
+		"QueryQS":   queryQS,
+		"QueryAmp":  queryAmp,
 	}
 	if err := feedSidebarOOBTmpl.Execute(w, feedData); err != nil {
 		log.Printf("render feed sidebar oob: %v", err)
@@ -137,9 +150,10 @@ func (h *Handler) ToggleRead(w http.ResponseWriter, r *http.Request) {
 // "all caught up" empty state when no unread articles remain in the current
 // view. The feed sidebar is refreshed alongside via an OOB swap so unread
 // counts stay authoritative.
-func (h *Handler) renderUnreadRemoval(w http.ResponseWriter, userID int64, feedIDStr string) {
+func (h *Handler) renderUnreadRemoval(w http.ResponseWriter, userID int64, feedIDStr, query string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
+	queryQS, queryAmp := searchQueryFragments(query)
 	// A non-empty feed_id that fails to parse intentionally falls back to nil
 	// (all feeds): the dashboard list applies the same ParseInt (feeds.go), so
 	// the count and the displayed view always agree. The empty response body is
@@ -167,7 +181,7 @@ func (h *Handler) renderUnreadRemoval(w http.ResponseWriter, userID int64, feedI
 		log.Printf("get feeds for oob: %v", err)
 		return
 	}
-	if err := feedSidebarOOBTmpl.Execute(w, map[string]any{"Feeds": feeds}); err != nil {
+	if err := feedSidebarOOBTmpl.Execute(w, map[string]any{"Feeds": feeds, "Query": query, "QueryQS": queryQS, "QueryAmp": queryAmp}); err != nil {
 		log.Printf("render feed sidebar oob: %v", err)
 	}
 }
@@ -293,7 +307,7 @@ func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	// Scroll-past-read under the unread-only filter: the card is swapped away
 	// via the same server-driven removal as the toggle (see renderUnreadRemoval).
 	if r.URL.Query().Get("unread") == "1" {
-		h.renderUnreadRemoval(w, userID, r.URL.Query().Get("feed_id"))
+		h.renderUnreadRemoval(w, userID, r.URL.Query().Get("feed_id"), r.URL.Query().Get("q"))
 		return
 	}
 

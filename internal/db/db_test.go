@@ -692,7 +692,7 @@ func TestGetArticlesByUserID(t *testing.T) {
 	db.CreateArticle(&model.Article{FeedID: feed1.ID, GUID: "g2", Title: "A2"})
 	db.CreateArticle(&model.Article{FeedID: feed2.ID, GUID: "g3", Title: "A3"})
 
-	articles, err := db.GetArticlesByUserID(user.ID, nil, false, 0, 0)
+	articles, err := db.GetArticlesByUserID(user.ID, nil, false, "", 0, 0)
 	if err != nil {
 		t.Fatalf("GetArticlesByUserID failed: %v", err)
 	}
@@ -712,7 +712,7 @@ func TestGetArticlesByUserIDFilteredByFeed(t *testing.T) {
 	db.CreateArticle(&model.Article{FeedID: feed1.ID, GUID: "g1", Title: "A1"})
 	db.CreateArticle(&model.Article{FeedID: feed2.ID, GUID: "g2", Title: "A2"})
 
-	articles, err := db.GetArticlesByUserID(user.ID, &feed1.ID, false, 0, 0)
+	articles, err := db.GetArticlesByUserID(user.ID, &feed1.ID, false, "", 0, 0)
 	if err != nil {
 		t.Fatalf("GetArticlesByUserID failed: %v", err)
 	}
@@ -972,9 +972,84 @@ func TestArticleContentNotExposedInList(t *testing.T) {
 		Content: &content,
 	})
 
-	articles, _ := db.GetArticlesByUserID(user.ID, nil, false, 0, 0)
+	articles, _ := db.GetArticlesByUserID(user.ID, nil, false, "", 0, 0)
 	if len(articles) > 0 && articles[0].Content != nil {
 		t.Error("Article content should NOT be populated in list queries (NULL AS content)")
+	}
+}
+
+func TestGetArticlesByUserIDSearch(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	user := createTestUser(t, db, "search@example.com", "hash")
+	feed := createTestFeed(t, db, user.ID, "Go News", "https://gonews.example.com/rss")
+
+	content := "This post explores database indexes and query plans"
+	articles := []*model.Article{
+		{FeedID: feed.ID, GUID: "s1", Title: "Understanding SQLite Indexes", Content: &content},
+		{FeedID: feed.ID, GUID: "s2", Title: "Rust Ownership Rules", Author: strPtr("Alice")},
+		{FeedID: feed.ID, GUID: "s3", Title: "Postgres vs SQLite"},
+	}
+	for _, a := range articles {
+		if _, err := db.CreateArticle(a); err != nil {
+			t.Fatalf("create article: %v", err)
+		}
+	}
+
+	cases := []struct {
+		name  string
+		query string
+		want  int
+	}{
+		{"empty query returns all", "", 3},
+		{"title substring", "sqlite", 2},
+		{"case-insensitive", "RUST", 1},
+		{"content match", "indexes", 1},
+		{"author match", "alice", 1},
+		{"feed title match", "go news", 3},
+		{"fuzzy multi-term across fields", "understanding sql", 1},
+		{"no match", "cobol", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := db.GetArticlesByUserID(user.ID, nil, false, tc.query, 0, 0)
+			if err != nil {
+				t.Fatalf("GetArticlesByUserID: %v", err)
+			}
+			if len(got) != tc.want {
+				t.Errorf("query %q: got %d articles, want %d", tc.query, len(got), tc.want)
+			}
+		})
+	}
+
+	// LIKE wildcards in the query must match literally, not as patterns.
+	db.CreateArticle(&model.Article{FeedID: feed.ID, GUID: "s4", Title: "100% Real Data"})
+	got, err := db.GetArticlesByUserID(user.ID, nil, false, "100%", 0, 0)
+	if err != nil {
+		t.Fatalf("GetArticlesByUserID: %v", err)
+	}
+	if len(got) != 1 || got[0].GUID != "s4" {
+		t.Errorf("literal %% search: got %d articles (want exactly s4)", len(got))
+	}
+
+	// Search composes with the unread filter.
+	got, err = db.GetArticlesByUserID(user.ID, nil, true, "real", 0, 0)
+	if err != nil {
+		t.Fatalf("GetArticlesByUserID: %v", err)
+	}
+	if len(got) != 1 || got[0].GUID != "s4" {
+		t.Errorf("search + unread filter: got %d articles, want exactly s4", len(got))
+	}
+	if err := db.MarkArticleRead(got[0].ID, user.ID); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+	got, err = db.GetArticlesByUserID(user.ID, nil, true, "real", 0, 0)
+	if err != nil {
+		t.Fatalf("GetArticlesByUserID: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("search + unread filter after mark read: got %d articles, want 0", len(got))
 	}
 }
 

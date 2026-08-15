@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/james/feedlot/internal/model"
@@ -183,7 +184,7 @@ func (db *DB) GetArticlesByFeedID(feedID int64) ([]model.Article, error) {
 	return articles, nil
 }
 
-func (db *DB) GetArticlesByUserID(userID int64, feedID *int64, unreadOnly bool, limit, offset int) ([]model.Article, error) {
+func (db *DB) GetArticlesByUserID(userID int64, feedID *int64, unreadOnly bool, query string, limit, offset int) ([]model.Article, error) {
 	var articles []model.Article
 	var err error
 
@@ -206,6 +207,30 @@ func (db *DB) GetArticlesByUserID(userID int64, feedID *int64, unreadOnly bool, 
 		baseQuery += " AND NOT a.is_read"
 	}
 
+	// Fuzzy-ish search: every whitespace-separated term must appear
+	// (case-insensitively, as a substring) in the title, author, summary,
+	// content, or feed title. LIKE wildcards in the input are escaped so
+	// they match literally, and terms may match different fields — "go
+	// index" finds a post titled "Go performance" whose content mentions
+	// indexes, like an fzf-style match across the whole card.
+	if terms := searchTerms(query); len(terms) > 0 {
+		baseQuery += " AND ("
+		for i, term := range terms {
+			if i > 0 {
+				baseQuery += " AND "
+			}
+			pattern := "%" + escapeLike(term) + "%"
+			baseQuery += fmt.Sprintf(
+				"(a.title LIKE $%d ESCAPE '\\' OR COALESCE(a.author, '') LIKE $%d ESCAPE '\\' OR "+
+					"COALESCE(a.summary, '') LIKE $%d ESCAPE '\\' OR COALESCE(a.content, '') LIKE $%d ESCAPE '\\' OR "+
+					"f.title LIKE $%d ESCAPE '\\')",
+				argIdx, argIdx, argIdx, argIdx, argIdx)
+			args = append(args, pattern)
+			argIdx++
+		}
+		baseQuery += ")"
+	}
+
 	baseQuery += " ORDER BY COALESCE(a.published_at, a.created_at) DESC"
 
 	if limit > 0 {
@@ -221,6 +246,21 @@ func (db *DB) GetArticlesByUserID(userID int64, feedID *int64, unreadOnly bool, 
 		articles = []model.Article{}
 	}
 	return articles, nil
+}
+
+// searchTerms splits a search query into individual terms on whitespace.
+// An empty query yields no terms and therefore no search filter.
+func searchTerms(query string) []string {
+	return strings.Fields(query)
+}
+
+// escapeLike escapes SQLite LIKE wildcards so user input is matched
+// literally instead of acting as a pattern.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
 }
 
 func (db *DB) ToggleArticleRead(id, userID int64) (*model.Article, error) {

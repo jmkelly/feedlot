@@ -35,6 +35,11 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// Unread-only filter
 	unreadOnly := r.URL.Query().Get("unread") == "1"
 
+	// Fuzzy search across articles
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	queryQS, queryAmp := searchQueryFragments(query)
+	clearH := clearHref(unreadOnly, query)
+
 	// Pagination
 	limit := 50
 	offset := 0
@@ -49,7 +54,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	articles, err := h.DB.GetArticlesByUserID(userID, selectedFeedID, unreadOnly, limit, offset)
+	articles, err := h.DB.GetArticlesByUserID(userID, selectedFeedID, unreadOnly, query, limit, offset)
 	if err != nil {
 		log.Printf("get articles: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -66,6 +71,10 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 			"Articles":     articles,
 			"UnreadOnly":   unreadOnly,
 			"FeedID":       feedIDStr,
+			"Query":        query,
+			"QueryQS":      queryQS,
+			"QueryAmp":     queryAmp,
+			"ClearHref":    clearH,
 			"Limit":        limit,
 			"Offset":       offset,
 			"FilterParams": filterParams(r),
@@ -112,6 +121,10 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		"Feeds":              feeds,
 		"Articles":           articles,
 		"FeedID":             feedIDStr,
+		"Query":              query,
+		"QueryQS":            queryQS,
+		"QueryAmp":           queryAmp,
+		"ClearHref":          clearH,
 		"UnreadOnly":         unreadOnly,
 		"Limit":              limit,
 		"Offset":             offset,
@@ -131,6 +144,8 @@ func (h *Handler) ListFeeds(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	userID := GetUserID(r)
 
+	queryQS, queryAmp := searchQueryFragments(r.URL.Query().Get("q"))
+
 	feedsList, err := h.DB.GetUserFeeds(userID)
 	if err != nil {
 		log.Printf("list feeds: %v", err)
@@ -139,8 +154,11 @@ func (h *Handler) ListFeeds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"Feeds":  feedsList,
-		"FeedID": r.URL.Query().Get("feed_id"),
+		"Feeds":     feedsList,
+		"FeedID":    r.URL.Query().Get("feed_id"),
+		"Query":     r.URL.Query().Get("q"),
+		"QueryQS":   queryQS,
+		"QueryAmp":  queryAmp,
 	}
 
 	if err := feedListTmpl.ExecuteTemplate(w, "sidebar-fragment", data); err != nil {
@@ -490,6 +508,9 @@ func (h *Handler) ListArticlesByFeed(w http.ResponseWriter, r *http.Request) {
 	feedIDStr := r.URL.Query().Get("feed_id")
 
 	unreadOnly := r.URL.Query().Get("unread") == "1"
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	queryQS, queryAmp := searchQueryFragments(query)
+	clearH := clearHref(unreadOnly, query)
 
 	var articles []model.Article
 	var err error
@@ -497,12 +518,12 @@ func (h *Handler) ListArticlesByFeed(w http.ResponseWriter, r *http.Request) {
 	if feedIDStr != "" {
 		fid, convErr := strconv.ParseInt(feedIDStr, 10, 64)
 		if convErr == nil {
-			articles, err = h.DB.GetArticlesByUserID(userID, &fid, unreadOnly, 0, 0)
+			articles, err = h.DB.GetArticlesByUserID(userID, &fid, unreadOnly, query, 0, 0)
 		} else {
-			articles, err = h.DB.GetArticlesByUserID(userID, nil, unreadOnly, 0, 0)
+			articles, err = h.DB.GetArticlesByUserID(userID, nil, unreadOnly, query, 0, 0)
 		}
 	} else {
-		articles, err = h.DB.GetArticlesByUserID(userID, nil, unreadOnly, 0, 0)
+		articles, err = h.DB.GetArticlesByUserID(userID, nil, unreadOnly, query, 0, 0)
 	}
 
 	if err != nil {
@@ -514,6 +535,10 @@ func (h *Handler) ListArticlesByFeed(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"Articles":     articles,
 		"FeedID":       feedIDStr,
+		"Query":        query,
+		"QueryQS":      queryQS,
+		"QueryAmp":     queryAmp,
+		"ClearHref":    clearH,
 		"UnreadOnly":   unreadOnly,
 		"Limit":        0,
 		"Offset":       0,
@@ -590,16 +615,16 @@ const sidebarInnerBodyDef = `{{define "sidebar-inner-body"}}
     </form>
   </div>
   <div class="feed{{if not $.FeedID}} feed--active{{end}}">
-    <a href="/" class="feed__row feed__row--all"
-       hx-get="/" hx-target="#article-list" hx-push-url="true"
+    <a href="/{{$.QueryQS}}" class="feed__row feed__row--all"
+       hx-get="/{{$.QueryQS}}" hx-target="#article-list" hx-push-url="true"
        hx-indicator="#loading">
       <span class="feed__title">All articles</span>
     </a>
   </div>
   {{range .Feeds}}
   <div class="feed{{if eq $.FeedID (printf "%d" .ID)}} feed--active{{end}}" data-feed-id="{{.ID}}">
-    <a href="/?feed_id={{.ID}}" class="feed__row"
-       hx-get="/?feed_id={{.ID}}" hx-target="#article-list" hx-push-url="true"
+    <a href="/?feed_id={{.ID}}{{$.QueryAmp}}" class="feed__row"
+       hx-get="/?feed_id={{.ID}}{{$.QueryAmp}}" hx-target="#article-list" hx-push-url="true"
        hx-indicator="#loading">
       <span class="feed__title">{{.Title}}</span>
       {{if gt .UnreadCount 0}}<span class="ear-tag" data-count="{{.UnreadCount}}">{{.UnreadCount}}</span>{{end}}
@@ -729,14 +754,18 @@ const dashboardTemplate = `
         {{if .FeedID}}
         <h2 class="stream__heading">
           Filtering by feed
-          <a href="/{{if .UnreadOnly}}?unread=1{{end}}" class="btn btn--ghost btn--mini" style="font-size:.7rem">✕ Clear</a>
+          <a href="{{.ClearHref}}" class="btn btn--ghost btn--mini" style="font-size:.7rem">✕ Clear</a>
         </h2>
         {{end}}
+        {{if .Query}}
+        <h2 class="stream__heading">Searching for "{{.Query}}"</h2>
+        {{end}}
         <div class="stream__toggles">
-          <a href="/?feed_id={{.FeedID}}" class="chip{{if not .UnreadOnly}} chip--on{{end}}" id="filter-all">All</a>
-          <a href="/?feed_id={{.FeedID}}&unread=1" class="chip{{if .UnreadOnly}} chip--on{{end}}" id="filter-unread">Unread</a>
+          <a href="/?feed_id={{.FeedID}}{{.QueryAmp}}" class="chip{{if not .UnreadOnly}} chip--on{{end}}" id="filter-all">All</a>
+          <a href="/?feed_id={{.FeedID}}&unread=1{{.QueryAmp}}" class="chip{{if .UnreadOnly}} chip--on{{end}}" id="filter-unread">Unread</a>
         </div>
       </div>
+      {{template "search-bar" .}}
       <div id="loading" class="htmx-indicator loading">Checking pens...</div>
       {{range .Articles}}
       <div class="card{{if not .IsRead}} is-unread{{end}}{{if .IsRead}} is-read{{end}}" data-article-id="{{.ID}}" data-feed-id="{{.FeedID}}">
@@ -747,7 +776,7 @@ const dashboardTemplate = `
           <p class="card__meta">
             {{if .Author}}<span>{{deref .Author}}</span>{{end}}
             {{if .PublishedAt}}<span>{{timeAgo .PublishedAt}}</span>{{end}}
-            <a href="/?feed_id={{.FeedID}}" class="card__pen" hx-get="/?feed_id={{.FeedID}}" hx-target="#article-list" hx-push-url="true">{{if .FeedTitle}}{{.FeedTitle}}{{else}}#{{.FeedID}}{{end}}</a>
+            <a href="/?feed_id={{.FeedID}}{{$.QueryAmp}}" class="card__pen" hx-get="/?feed_id={{.FeedID}}{{$.QueryAmp}}" hx-target="#article-list" hx-push-url="true">{{if .FeedTitle}}{{.FeedTitle}}{{else}}#{{.FeedID}}{{end}}</a>
           </p>
           {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
         </div>
@@ -766,13 +795,13 @@ const dashboardTemplate = `
       {{else}}
       <div class="empty">
         <div class="empty__mark">🐄</div>
-        {{if .UnreadOnly}}<p class="empty__t">All caught up</p><p class="empty__s">No unread articles in this view</p>{{else}}<p class="empty__t">No articles yet</p><p class="empty__s">Add a feed or refresh existing ones</p>{{end}}
+        {{if .Query}}<p class="empty__t">No matches</p><p class="empty__s">Nothing found for "{{.Query}}"</p>{{else if .UnreadOnly}}<p class="empty__t">All caught up</p><p class="empty__s">No unread articles in this view</p>{{else}}<p class="empty__t">No articles yet</p><p class="empty__s">Add a feed or refresh existing ones</p>{{end}}
       </div>
       {{end}}
       {{if and (gt (len .Articles) 0) (gt .Limit 0)}}
       <div class="load-more" id="load-more-area">
         <button class="btn btn--ghost w-full"
-          hx-get="/?feed_id={{.FeedID}}{{if .UnreadOnly}}&unread=1{{end}}&offset={{add .Offset .Limit}}&limit={{.Limit}}"
+          hx-get="/?feed_id={{.FeedID}}{{if .UnreadOnly}}&unread=1{{end}}{{$.QueryAmp}}&offset={{add .Offset .Limit}}&limit={{.Limit}}"
           hx-target="#load-more-area" hx-swap="outerHTML"
           hx-trigger="click"
           hx-indicator="#loading">
@@ -792,6 +821,7 @@ const dashboardTemplate = `
         <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Navigate articles up/down</td></tr>
         <tr><td><kbd>r</kbd></td><td>Toggle read/unread on focused article</td></tr>
         <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>Navigate feeds next/previous</td></tr>
+        <tr><td><kbd>/</kbd></td><td>Focus search</td></tr>
         <tr><td><kbd>f</kbd></td><td>Focus add-feed input</td></tr>
         <tr><td><kbd>?</kbd></td><td>Show/hide this help</td></tr>
       </table>
@@ -806,14 +836,18 @@ const articleListTemplate = `
   {{if .FeedID}}
   <h2 class="stream__heading">
     Filtering by feed
-    <a href="/{{if .UnreadOnly}}?unread=1{{end}}" class="btn btn--ghost btn--mini" style="font-size:.7rem">✕ Clear</a>
+    <a href="{{.ClearHref}}" class="btn btn--ghost btn--mini" style="font-size:.7rem">✕ Clear</a>
   </h2>
   {{end}}
+  {{if .Query}}
+  <h2 class="stream__heading">Searching for "{{.Query}}"</h2>
+  {{end}}
   <div class="stream__toggles">
-    <a href="/?feed_id={{.FeedID}}" class="chip{{if not .UnreadOnly}} chip--on{{end}}" id="filter-all">All</a>
-    <a href="/?feed_id={{.FeedID}}&unread=1" class="chip{{if .UnreadOnly}} chip--on{{end}}" id="filter-unread">Unread</a>
+    <a href="/?feed_id={{.FeedID}}{{.QueryAmp}}" class="chip{{if not .UnreadOnly}} chip--on{{end}}" id="filter-all">All</a>
+    <a href="/?feed_id={{.FeedID}}&unread=1{{.QueryAmp}}" class="chip{{if .UnreadOnly}} chip--on{{end}}" id="filter-unread">Unread</a>
   </div>
 </div>
+{{template "search-bar" .}}
 {{range .Articles}}
 <div class="card{{if not .IsRead}} is-unread{{end}}{{if .IsRead}} is-read{{end}}" data-article-id="{{.ID}}" data-feed-id="{{.FeedID}}">
   <div class="card__main">
@@ -823,7 +857,7 @@ const articleListTemplate = `
     <p class="card__meta">
       {{if .Author}}<span>{{deref .Author}}</span>{{end}}
       {{if .PublishedAt}}<span>{{timeAgo .PublishedAt}}</span>{{end}}
-      <a href="/?feed_id={{.FeedID}}" class="card__pen" hx-get="/?feed_id={{.FeedID}}" hx-target="#article-list" hx-push-url="true">{{if .FeedTitle}}{{.FeedTitle}}{{else}}#{{.FeedID}}{{end}}</a>
+      <a href="/?feed_id={{.FeedID}}{{$.QueryAmp}}" class="card__pen" hx-get="/?feed_id={{.FeedID}}{{$.QueryAmp}}" hx-target="#article-list" hx-push-url="true">{{if .FeedTitle}}{{.FeedTitle}}{{else}}#{{.FeedID}}{{end}}</a>
     </p>
     {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
   </div>
@@ -842,13 +876,13 @@ const articleListTemplate = `
 {{else}}
 <div class="empty">
   <div class="empty__mark">🐄</div>
-  {{if .UnreadOnly}}<p class="empty__t">All caught up</p><p class="empty__s">No unread articles in this view</p>{{else}}<p class="empty__t">No articles yet</p><p class="empty__s">Add a feed or refresh existing ones</p>{{end}}
+  {{if .Query}}<p class="empty__t">No matches</p><p class="empty__s">Nothing found for "{{.Query}}"</p>{{else if .UnreadOnly}}<p class="empty__t">All caught up</p><p class="empty__s">No unread articles in this view</p>{{else}}<p class="empty__t">No articles yet</p><p class="empty__s">Add a feed or refresh existing ones</p>{{end}}
 </div>
 {{end}}
 {{if and (gt (len .Articles) 0) (gt .Limit 0) (ge (len .Articles) .Limit)}}
 <div class="load-more" id="load-more-area">
   <button class="btn btn--ghost w-full"
-    hx-get="/?feed_id={{.FeedID}}{{if .UnreadOnly}}&unread=1{{end}}&offset={{add .Offset .Limit}}&limit={{.Limit}}"
+    hx-get="/?feed_id={{.FeedID}}{{if .UnreadOnly}}&unread=1{{end}}{{$.QueryAmp}}&offset={{add .Offset .Limit}}&limit={{.Limit}}"
     hx-target="#load-more-area" hx-swap="outerHTML"
     hx-trigger="click"
     hx-indicator="#loading">
@@ -868,7 +902,7 @@ const loadMoreTemplate = `
     <p class="card__meta">
       {{if .Author}}<span>{{deref .Author}}</span>{{end}}
       {{if .PublishedAt}}<span>{{timeAgo .PublishedAt}}</span>{{end}}
-      <a href="/?feed_id={{.FeedID}}" class="card__pen" hx-get="/?feed_id={{.FeedID}}" hx-target="#article-list" hx-push-url="true">{{if .FeedTitle}}{{.FeedTitle}}{{else}}#{{.FeedID}}{{end}}</a>
+      <a href="/?feed_id={{.FeedID}}{{$.QueryAmp}}" class="card__pen" hx-get="/?feed_id={{.FeedID}}{{$.QueryAmp}}" hx-target="#article-list" hx-push-url="true">{{if .FeedTitle}}{{.FeedTitle}}{{else}}#{{.FeedID}}{{end}}</a>
     </p>
     {{if .Summary}}<p class="card__summary">{{deref .Summary}}</p>{{end}}
   </div>
@@ -888,7 +922,7 @@ const loadMoreTemplate = `
 {{if and (gt (len .Articles) 0) (gt .Limit 0) (ge (len .Articles) .Limit)}}
 <div class="load-more" id="load-more-area">
   <button class="btn btn--ghost w-full"
-    hx-get="/?feed_id={{.FeedID}}{{if .UnreadOnly}}&unread=1{{end}}&offset={{add .Offset .Limit}}&limit={{.Limit}}"
+    hx-get="/?feed_id={{.FeedID}}{{if .UnreadOnly}}&unread=1{{end}}{{$.QueryAmp}}&offset={{add .Offset .Limit}}&limit={{.Limit}}"
     hx-target="#load-more-area" hx-swap="outerHTML"
     hx-trigger="click"
     hx-indicator="#loading">

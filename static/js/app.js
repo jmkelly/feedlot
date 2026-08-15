@@ -14,8 +14,14 @@
   let focusedArticleIndex = -1;
   let progressTicking = false;
   let summaryOpener = null; // element to refocus when the summary modal closes
+  let searchHadFocus = false; // search input focused when an htmx request fired
 
   // ─── Utility ────────────────────────────────────────────────────────
+
+  /** Escape regex metacharacters for literal matching */
+  function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
 
   /** Extract article ID from the card's toggle button hx-post attribute */
   function getArticleId(card) {
@@ -82,6 +88,65 @@
     } catch (e) {
       return false;
     }
+  }
+
+  // ─── Article search ────────────────────────────────────────────────
+
+  /** Focus the fuzzy-search box (keyboard shortcut /) */
+  function focusArticleSearch() {
+    var input = document.getElementById('article-search');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+
+  /**
+   * Wrap search terms in <mark> within titles/summaries. Idempotent: any
+   * existing marks are unwrapped first, so re-running over swapped-in cards
+   * (load-more, read-toggle, feed clicks) never double-wraps. Only text
+   * nodes are touched, so links and entities survive intact.
+   */
+  function highlightSearchMatches(scope) {
+    var q = null;
+    try { q = new URLSearchParams(window.location.search).get('q'); } catch (e) {}
+    if (!q) return;
+    var terms = q.split(/\s+/).filter(Boolean).map(escapeRegExp);
+    if (terms.length === 0) return;
+    var re = new RegExp('(' + terms.join('|') + ')', 'gi');
+
+    var nodes = (scope || document).querySelectorAll('.card__title, .card__summary');
+    nodes.forEach(function(node) {
+      // Unwrap previous highlights so re-highlighting stays idempotent
+      node.querySelectorAll('mark').forEach(function(m) {
+        m.replaceWith(document.createTextNode(m.textContent));
+      });
+
+      var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null);
+      var targets = [];
+      while (walker.nextNode()) {
+        var text = walker.currentNode;
+        if (!text.nodeValue || !text.nodeValue.trim()) continue;
+        re.lastIndex = 0;
+        if (re.test(text.nodeValue)) targets.push(text);
+      }
+      targets.forEach(function(text) {
+        var frag = document.createDocumentFragment();
+        var value = text.nodeValue;
+        var last = 0;
+        re.lastIndex = 0;
+        var m;
+        while ((m = re.exec(value)) !== null) {
+          if (m.index > last) frag.appendChild(document.createTextNode(value.slice(last, m.index)));
+          var mark = document.createElement('mark');
+          mark.textContent = m[0];
+          frag.appendChild(mark);
+          last = m.index + m[0].length;
+        }
+        if (last < value.length) frag.appendChild(document.createTextNode(value.slice(last)));
+        text.replaceWith(frag);
+      });
+    });
   }
 
   // ─── Sidebar refresh (for non-HTMX operations) ─────────────────────
@@ -570,6 +635,9 @@
     // Full-summary expand affordance (wrap + truncation state)
     wireSummaryExpand();
 
+    // Highlight search terms on initial page load
+    highlightSearchMatches(document);
+
     // Only auto-dismiss success toasts (not error toasts — those stay until dismissed)
     var flashMessages = document.querySelectorAll('.alert--ok:not(._timed)');
     flashMessages.forEach(function(msg) {
@@ -685,6 +753,23 @@
         e.preventDefault();
         toggleShortcuts();
         break;
+      case '/':
+        e.preventDefault();
+        focusArticleSearch();
+        break;
+    }
+  });
+
+  // Escape inside the search box clears the query (dispatching an input
+  // event lets htmx fire the debounced reload); a second Escape blurs.
+  document.addEventListener('keydown', function(e) {
+    var input = document.getElementById('article-search');
+    if (!input || e.target !== input || e.key !== 'Escape') return;
+    if (input.value) {
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+      input.blur();
     }
   });
 
@@ -699,6 +784,14 @@
       var sb = document.getElementById('feed-sidebar');
       sidebarWasOpen = !!(sb && sb.classList.contains('is-open'));
     }
+  });
+
+  // Remember whether the search box was focused when a request fired, so
+  // the list swap that replaces it (and everything else in #article-list)
+  // can hand focus straight back.
+  document.addEventListener('htmx:beforeRequest', function(e) {
+    var el = e.detail.elt;
+    searchHadFocus = !!(el && el.id === 'article-search');
   });
 
   // After any HTMX swap, reset state and re-wire controls/cards.
@@ -720,6 +813,33 @@
     if (target && target.id === 'article-list') {
       var stream = document.getElementById('article-list');
       if (stream) stream.scrollTop = 0;
+    }
+
+    // Search: hand focus back to the box (it was replaced by the swap),
+    // highlight matching terms in the fresh cards, and drop a stale empty
+    // q= from the URL once htmx has pushed it.
+    if (searchHadFocus) {
+      var searchInput = document.getElementById('article-search');
+      if (searchInput) {
+        searchInput.focus();
+        var len = searchInput.value.length;
+        try { searchInput.setSelectionRange(len, len); } catch (e) {}
+      }
+      searchHadFocus = false;
+    }
+    var isArticleSwap = target && (target.id === 'article-list' || target.id === 'load-more-area' ||
+      (target.classList && (target.classList.contains('card') || target.classList.contains('load-more'))));
+    if (isArticleSwap) {
+      highlightSearchMatches(document);
+      setTimeout(function() {
+        try {
+          var url = new URL(window.location.href);
+          if (url.searchParams.get('q') === '') {
+            url.searchParams.delete('q');
+            history.replaceState(null, '', url.toString());
+          }
+        } catch (e) {}
+      }, 0);
     }
   });
 

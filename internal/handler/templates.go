@@ -77,7 +77,7 @@ var (
 		},
 		"timeAgo": timeAgo,
 		"add":     func(a, b int) int { return a + b },
-	}).Parse(sidebarDefs + dashboardTemplate))
+	}).Parse(sidebarDefs + searchBarDef + dashboardTemplate))
 
 	feedListTmpl = template.Must(template.New("feed-list").Funcs(template.FuncMap{
 		"deref": func(s *string) string {
@@ -108,7 +108,7 @@ var (
 		},
 		"timeAgo": timeAgo,
 		"add":     func(a, b int) int { return a + b },
-	}).Parse(articleListTemplate))
+	}).Parse(searchBarDef + articleListTemplate))
 
 	loadMoreTmpl = template.Must(template.New("load-more").Funcs(template.FuncMap{
 		"deref": func(s *string) string {
@@ -154,9 +154,9 @@ var (
 )
 
 // filterParams returns the query-string suffix (with a leading "?") that
-// preserves the current dashboard filter state — unread-only toggle and feed
-// selection — across HTMX requests like the read-toggle and summarize buttons.
-// Returns "" when no filter is active.
+// preserves the current dashboard filter state — unread-only toggle, feed
+// selection, and the fuzzy-search query — across HTMX requests like the
+// read-toggle and summarize buttons. Returns "" when no filter is active.
 func filterParams(r *http.Request) string {
 	q := r.URL.Query()
 	vals := url.Values{}
@@ -166,11 +166,70 @@ func filterParams(r *http.Request) string {
 	if fid := q.Get("feed_id"); fid != "" {
 		vals.Set("feed_id", fid)
 	}
+	if s := q.Get("q"); s != "" {
+		vals.Set("q", s)
+	}
 	if len(vals) == 0 {
 		return ""
 	}
 	return "?" + vals.Encode()
 }
+
+// clearHref builds the "clear feed filter" link used in the stream heading,
+// preserving the unread toggle and the active search. Computed server-side
+// because conditional query-string segments inside an href make html/template's
+// URL escaping context ambiguous.
+func clearHref(unreadOnly bool, query string) template.URL {
+	href := "/"
+	if unreadOnly {
+		href += "?unread=1"
+	}
+	if query != "" {
+		if unreadOnly {
+			href += "&"
+		} else {
+			href += "?"
+		}
+		href += "q=" + url.QueryEscape(query)
+	}
+	return template.URL(href)
+}
+
+// searchQueryFragments returns the pre-escaped query fragments that preserve
+// an active search across links, as trusted template.URL values so they pass
+// through html/template unmodified (the built-in urlquery func can't be used
+// inside non-URL attributes like hx-get, and plain strings get re-escaped in
+// href URL contexts). QueryAmp is for URLs that already carry a query string
+// ("&q=..."), QueryQS for bare paths ("?q=..."). Both are empty when no
+// search is active.
+func searchQueryFragments(query string) (qs, amp template.URL) {
+	if query == "" {
+		return "", ""
+	}
+	q := "q=" + url.QueryEscape(query)
+	return template.URL("?" + q), template.URL("&" + q)
+}
+
+// searchBarDef is the fuzzy-search row rendered at the top of the article
+// stream. It lives inside #article-list so every list swap re-renders it
+// with fresh filter state; hidden inputs carry the current feed/unread
+// filters so a search composes with them (the visible input's value is
+// included automatically because it is the htmx trigger). app.js restores
+// focus to the input across swaps and highlights matching terms.
+const searchBarDef = `{{define "search-bar"}}
+<div class="searchbar">
+  <input type="hidden" name="feed_id" value="{{.FeedID}}">
+  <input type="hidden" name="unread" value="{{if .UnreadOnly}}1{{end}}">
+  <span class="searchbar__icon" aria-hidden="true">⌕</span>
+  <input type="search" id="article-search" name="q" value="{{.Query}}"
+         placeholder="Search posts ( / )" autocomplete="off" spellcheck="false"
+         aria-label="Search posts"
+         hx-get="/" hx-trigger="input changed delay:250ms"
+         hx-target="#article-list" hx-push-url="true"
+         hx-indicator="#loading" hx-include="closest .searchbar">
+  {{if .Query}}<a class="searchbar__clear" href="/?feed_id={{.FeedID}}{{if .UnreadOnly}}&unread=1{{end}}" title="Clear search" aria-label="Clear search">✕</a>{{end}}
+</div>
+{{end}}`
 
 // emptyStateTemplate is the "all caught up" placeholder swapped in place of a
 // card when a read action empties the unread-only view.

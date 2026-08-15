@@ -11,6 +11,7 @@
 - **📡 RSS & Atom feeds** — Subscribe to any feed. Feedlot fetches full article content on ingest and keeps polling in the background.
 - **🤖 AI summarization** — Articles are passed through your choice of LLM (OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint) for concise, readable summaries.
 - **✅ Read/unread tracking** — One-click toggling with zero page reloads via HTMX. Mark individual articles or bulk-toggle at the feed level.
+- **🔍 Fuzzy search** — Type to fuzzy-find past posts by title, author, summary, content, or feed (press `/`, `Esc` to clear). Composes with the unread and per-feed filters.
 - **🌗 Dark mode** — System-aware dark/light theme toggle.
 - **📱 Mobile responsive** — Full UI works on phones, tablets, and desktops.
 - **📂 OPML import** — Bring your existing subscriptions over in one click.
